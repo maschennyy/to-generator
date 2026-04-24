@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  SPV
+  USER
+}
+
+enum StatusTO {
+  PENDING
+  DIPROSES
+  SELESAI
+  DIBATALKAN
+}
+
+enum TipeAnomali {
+  TURUN_DRASTIS
+  STAGNAN
+  NOL_PEMAKAIAN
+  LONJAKAN
+  POLA_TIDAK_WAJAR
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  nama      String
+  role      Role     @default(USER)
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targetOperasi TargetOperasi[] @relation("CreatedBy")
+  logAktivitas  LogAktivitas[]
+
+  @@map("users")
+}
+
+model Pelanggan {
+  id          String   @id @default(cuid())
+  idPelanggan String   @unique
+  nama        String
+  tarif       String
+  daya        Int
+  lokasi      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pemakaian     Pemakaian[]
+  targetOperasi TargetOperasi[]
+
+  @@map("pelanggan")
+}
+
+model Pemakaian {
+  id          String   @id @default(cuid())
+  pelangganId String
+  bulan       Int
+  tahun       Int
+  kwh         Float
+  keterangan  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pelanggan Pelanggan @relation(fields: [pelangganId], references: [id], onDelete: Cascade)
+
+  @@unique([pelangganId, bulan, tahun])
+  @@map("pemakaian")
+}
+
+model TargetOperasi {
+  id          String      @id @default(cuid())
+  pelangganId String
+  tipeAnomali TipeAnomali
+  alasan      String
+  skor        Float
+  status      StatusTO    @default(PENDING)
+  periode     String
+  catatan     String?
+  createdById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  pelanggan Pelanggan @relation(fields: [pelangganId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("CreatedBy", fields: [createdById], references: [id])
+
+  @@map("target_operasi")
+}
+
+model Temuan {
+  id        String   @id @default(cuid())
+  namaPola  String   @unique
+  deskripsi String
+  kriteria  Json
+  aktif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("temuan")
+}
+
+model LogAktivitas {
+  id        String   @id @default(cuid())
+  userId    String
+  aksi      String
+  detail    String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("log_aktivitas")
+}
