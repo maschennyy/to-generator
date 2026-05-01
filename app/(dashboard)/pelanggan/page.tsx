@@ -1,8 +1,9 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
-import { Plus } from "lucide-react"
+import { Plus, Upload, Users } from "lucide-react"
 import { PelangganTable } from "@/components/pelanggan/pelanggan-table"
+import { Button } from "@/components/ui/button"
 
 export default async function PelangganPage() {
   const session = await auth()
@@ -15,26 +16,34 @@ export default async function PelangganPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Data Pelanggan</h1>
+          <div className="flex items-center gap-2">
+            <Users className="h-8 w-8 text-blue-600" />
+            <h1 className="text-3xl font-bold">Pelanggan</h1>
+          </div>
           <p className="text-muted-foreground mt-1">
-            Kelola data pelanggan listrik
+            Kelola data pelanggan dan import massal dari file DIL
           </p>
         </div>
         {isAdmin && (
-          <Link
-            href="/pelanggan/new"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Tambah Pelanggan
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/pelanggan/import">
+              <Button variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import Pelanggan
+              </Button>
+            </Link>
+            <Link href="/pelanggan/new">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />
+                Tambah Pelanggan
+              </Button>
+            </Link>
+          </div>
         )}
       </div>
 
-      {/* Table */}
       <PelangganTable isAdmin={isAdmin} />
     </div>
   )

@@ -1,7 +1,7 @@
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/sidebar"
-import { Header } from "@/components/header"
+import { Topbar } from "@/components/topbar"
 
 export default async function DashboardLayout({
   children,
@@ -15,11 +15,14 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
       <Sidebar userRole={session.user.role} />
-      <div className="flex-1 flex flex-col">
-        <Header user={session.user} />
-        <main className="flex-1 p-6 overflow-auto">{children}</main>
+      <div className="flex-1 flex flex-col min-w-0">
+        <Topbar
+          userName={session.user.nama || session.user.username || "User"}
+          userRole={session.user.role}
+        />
+        <main className="flex-1 p-6 overflow-x-auto">{children}</main>
       </div>
     </div>
   )

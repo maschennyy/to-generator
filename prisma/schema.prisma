@@ -57,17 +57,19 @@ model User {
 }
 
 model Pelanggan {
-  id          String   @id @default(cuid())
-  idPelanggan String   @unique
-  nama        String
-  tarif       String
-  daya        Int
-  lokasi      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String    @id @default(cuid())
+  idPelanggan     String    @unique
+  nama            String
+  tarif           String
+  daya            Int
+  lokasi          String
+  isToHistory     Boolean   @default(false)
+  dataLengkap     Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  pemakaian     Pemakaian[]
-  targetOperasi TargetOperasi[]
+  pemakaian       Pemakaian[]
+  targetOperasi   TargetOperasi[]
 
   @@map("pelanggan")
 }
@@ -130,4 +132,15 @@ model LogAktivitas {
   user User @relation(fields: [userId], references: [id])
 
   @@map("log_aktivitas")
+}
+
+
+model TOHistoris {
+  id            String    @id @default(cuid())
+  idPelanggan   String    @unique
+  tanggalTemuan DateTime?
+  kategori      String?
+  createdAt     DateTime  @default(now())
+
+  @@map("to_historis")
 }

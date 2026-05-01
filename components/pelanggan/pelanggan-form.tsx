@@ -188,7 +188,7 @@ export function PelangganForm({ mode, initialData }: PelangganFormProps) {
                 <SelectTrigger id="tarif">
                   <SelectValue placeholder="Pilih tarif" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-64">
                   {DAFTAR_TARIF.map((tarif) => (
                     <SelectItem key={tarif} value={tarif}>
                       {tarif}
@@ -219,7 +219,7 @@ export function PelangganForm({ mode, initialData }: PelangganFormProps) {
                 <SelectTrigger id="daya">
                   <SelectValue placeholder="Pilih daya" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-64">
                   {DAFTAR_DAYA.map((daya) => (
                     <SelectItem key={daya} value={daya.toString()}>
                       {daya.toLocaleString("id-ID")} VA
