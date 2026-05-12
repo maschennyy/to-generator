@@ -144,3 +144,15 @@ model TOHistoris {
 
   @@map("to_historis")
 }
+
+model TargetOperasi {
+  id              String   @id @default(cuid())
+  id_pelanggan    String   @unique
+  nama_pelanggan  String
+  tarif           String
+  daya            Int
+  similarity_score Float   // Skor kemiripan dengan pola temuan (0-100%)
+  status          String   // Contoh: 'Draft', 'Siap Periksa', 'Sedang Proses'
+  kriteria_utama  String   // Alasan terpilih (misal: "Drop tegangan fasa T")
+  createdAt       DateTime @default(now())
+}
