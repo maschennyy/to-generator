@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { detectAnomaly, getPeriode } from "@/lib/anomali/detector"
-import type { StatusTO, TipeAnomali } from "@/lib/generated/prisma/enums"
 
-// GET /api/target-operasi
+// GET /api/target-operasi — tidak berubah, tetap sama
 export async function GET(request: NextRequest) {
   try {
     const session = await auth()
@@ -14,22 +13,23 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get("search") || ""
-    const status = (searchParams.get("status") || "") as StatusTO | ""
-    const tipe = (searchParams.get("tipe") || "") as TipeAnomali | ""
+    const status = searchParams.get("status") || ""
+    const tipe = searchParams.get("tipe") || ""
     const periode = searchParams.get("periode") || ""
     const page = parseInt(searchParams.get("page") || "1")
     const limit = parseInt(searchParams.get("limit") || "20")
     const skip = (page - 1) * limit
 
-    const where: {
-      status?: StatusTO
-      tipeAnomali?: TipeAnomali
+    type WhereClause = {
+      status?: string
+      tipeAnomali?: string
       periode?: string
       pelanggan?: {
         OR?: Array<{ [key: string]: { contains: string; mode: "insensitive" } }>
       }
-    } = {}
+    }
 
+    const where: WhereClause = {}
     if (status) where.status = status
     if (tipe) where.tipeAnomali = tipe
     if (periode) where.periode = periode
@@ -71,12 +71,7 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    const counts = {
-      PENDING: 0,
-      DIPROSES: 0,
-      SELESAI: 0,
-      DIBATALKAN: 0,
-    } as Record<StatusTO, number>
+    const counts = { PENDING: 0, DIPROSES: 0, SELESAI: 0, DIBATALKAN: 0 } as Record<string, number>
     for (const c of statusCounts) {
       counts[c.status] = c._count._all
     }
@@ -96,14 +91,11 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error("GET /api/target-operasi error:", error)
-    return NextResponse.json(
-      { error: "Terjadi kesalahan server" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })
   }
 }
 
-// POST /api/target-operasi -> generate TO (run anomaly detection)
+// POST /api/target-operasi — generate TO sebagai background job
 export async function POST(request: NextRequest) {
   try {
     const session = await auth()
@@ -111,116 +103,66 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     if (session.user.role === "USER") {
-      return NextResponse.json(
-        { error: "Forbidden: Hanya Admin atau SPV" },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: "Forbidden: Hanya Admin atau SPV" }, { status: 403 })
     }
 
     const body = await request.json().catch(() => ({}))
     const replaceExistingPending: boolean = body?.replaceExistingPending !== false
 
-    // Load all pelanggan that have at least one pemakaian record.
-    const pelangganList = await prisma.pelanggan.findMany({
-      where: { pemakaian: { some: {} } },
-      include: {
-        pemakaian: {
-          orderBy: [{ tahun: "asc" }, { bulan: "asc" }],
-        },
+    // Cek apakah sudah ada job GENERATE_TO yang sedang berjalan
+    const runningJob = await prisma.importJob.findFirst({
+      where: {
+        type: "GENERATE_TO",
+        status: { in: ["PENDING", "PROCESSING"] },
       },
     })
 
-    let detected = 0
-    let created = 0
-    let skipped = 0
-    const skippedReasons: Record<string, number> = {}
-
-    for (const pelanggan of pelangganList) {
-      const samples = pelanggan.pemakaian.map((p) => ({
-        bulan: p.bulan,
-        tahun: p.tahun,
-        kwh: p.kwh,
-      }))
-
-      const hit = detectAnomaly(samples)
-      if (!hit) {
-        skipped++
-        skippedReasons["tidak_ada_anomali"] =
-          (skippedReasons["tidak_ada_anomali"] || 0) + 1
-        continue
-      }
-      detected++
-
-      const periode = getPeriode(samples)
-
-      // Skip if an identical TO already exists for this pelanggan + periode.
-      // Optionally replace PENDING ones so re-run picks up newer data.
-      const existing = await prisma.targetOperasi.findFirst({
-        where: {
-          pelangganId: pelanggan.id,
-          periode,
-        },
-      })
-
-      if (existing) {
-        if (replaceExistingPending && existing.status === "PENDING") {
-          await prisma.targetOperasi.update({
-            where: { id: existing.id },
-            data: {
-              tipeAnomali: hit.tipeAnomali,
-              alasan: hit.alasan,
-              skor: hit.skor,
-            },
-          })
-          // Counted as created (refreshed)
-          created++
-        } else {
-          skipped++
-          skippedReasons["sudah_ada"] = (skippedReasons["sudah_ada"] || 0) + 1
-        }
-        continue
-      }
-
-      await prisma.targetOperasi.create({
-        data: {
-          pelangganId: pelanggan.id,
-          tipeAnomali: hit.tipeAnomali,
-          alasan: hit.alasan,
-          skor: hit.skor,
-          periode,
-          status: "PENDING",
-          createdById: session.user.id,
-        },
-      })
-      created++
+    if (runningJob) {
+      return NextResponse.json(
+        { error: "Generate TO sedang berjalan. Tunggu hingga selesai sebelum menjalankan ulang." },
+        { status: 409 }
+      )
     }
 
-    await prisma.logAktivitas.create({
+    // Hitung total pelanggan yang punya data pemakaian sebagai estimasi
+    const totalPelanggan = await prisma.pelanggan.count({
+      where: { pemakaian: { some: {} } },
+    })
+
+    // Buat job record
+    const job = await prisma.importJob.create({
       data: {
         userId: session.user.id,
-        aksi: "GENERATE_TO",
-        detail: `Generate TO: ${pelangganList.length} pelanggan dianalisis, ${detected} anomali terdeteksi, ${created} TO dibuat/diperbarui.`,
+        type: "GENERATE_TO",
+        status: "PROCESSING",
+        total: totalPelanggan,
+        processed: 0,
       },
     })
 
-    return NextResponse.json({
-      message: "Generate TO selesai",
-      analyzed: pelangganList.length,
-      detected,
-      created,
-      skipped,
-      skippedReasons,
+    // Jalankan di background — tidak di-await
+    runGenerateTO(job.id, session.user.id, replaceExistingPending).catch(async (err) => {
+      console.error(`Generate TO job ${job.id} failed:`, err)
+      await prisma.importJob.update({
+        where: { id: job.id },
+        data: {
+          status: "FAILED",
+          errorDetail: err instanceof Error ? err.message : "Error tak terduga",
+        },
+      })
     })
+
+    return NextResponse.json(
+      { jobId: job.id, total: totalPelanggan, message: "Generate TO dimulai di latar belakang" },
+      { status: 202 }
+    )
   } catch (error) {
     console.error("POST /api/target-operasi error:", error)
-    return NextResponse.json(
-      { error: "Terjadi kesalahan server" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })
   }
 }
 
-// DELETE /api/target-operasi -> bulk delete by ids or deleteAll
+// DELETE /api/target-operasi — tidak berubah
 export async function DELETE(request: NextRequest) {
   try {
     const session = await auth()
@@ -228,10 +170,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     if (session.user.role !== "ADMIN") {
-      return NextResponse.json(
-        { error: "Forbidden: Hanya Admin" },
-        { status: 403 }
-      )
+      return NextResponse.json({ error: "Forbidden: Hanya Admin" }, { status: 403 })
     }
 
     const body = await request.json()
@@ -246,23 +185,14 @@ export async function DELETE(request: NextRequest) {
           detail: `Hapus SEMUA Target Operasi: ${deleted.count} data`,
         },
       })
-      return NextResponse.json({
-        message: "Semua Target Operasi dihapus",
-        deleted: deleted.count,
-      })
+      return NextResponse.json({ message: "Semua Target Operasi dihapus", deleted: deleted.count })
     }
 
     if (!Array.isArray(ids) || ids.length === 0) {
-      return NextResponse.json(
-        { error: "Pilih minimal 1 TO untuk dihapus" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Pilih minimal 1 TO untuk dihapus" }, { status: 400 })
     }
 
-    const deleted = await prisma.targetOperasi.deleteMany({
-      where: { id: { in: ids } },
-    })
-
+    const deleted = await prisma.targetOperasi.deleteMany({ where: { id: { in: ids } } })
     await prisma.logAktivitas.create({
       data: {
         userId: session.user.id,
@@ -271,15 +201,119 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({
-      message: `${deleted.count} Target Operasi dihapus`,
-      deleted: deleted.count,
-    })
+    return NextResponse.json({ message: `${deleted.count} Target Operasi dihapus`, deleted: deleted.count })
   } catch (error) {
     console.error("DELETE /api/target-operasi error:", error)
-    return NextResponse.json(
-      { error: "Terjadi kesalahan server" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })
   }
+}
+
+// ============================================================
+// BACKGROUND PROCESSOR
+// ============================================================
+
+const BATCH_SIZE = 200
+
+async function runGenerateTO(
+  jobId: string,
+  userId: string,
+  replaceExistingPending: boolean
+) {
+  let processed = 0
+  let detected = 0
+  let created = 0
+  let skipped = 0
+
+  // Ambil semua pelanggan yang punya data pemakaian
+  const pelangganList = await prisma.pelanggan.findMany({
+    where: { pemakaian: { some: {} } },
+    include: {
+      pemakaian: {
+        orderBy: [{ tahun: "asc" }, { bulan: "asc" }],
+      },
+    },
+  })
+
+  for (let i = 0; i < pelangganList.length; i += BATCH_SIZE) {
+    const batch = pelangganList.slice(i, i + BATCH_SIZE)
+
+    for (const pelanggan of batch) {
+      const samples = pelanggan.pemakaian.map((p) => ({
+        bulan: p.bulan,
+        tahun: p.tahun,
+        kwh: p.kwh,
+      }))
+
+      const hit = detectAnomaly(samples)
+      processed++
+
+      if (!hit) {
+        skipped++
+        continue
+      }
+
+      detected++
+      const periode = getPeriode(samples)
+
+      const existing = await prisma.targetOperasi.findFirst({
+        where: { pelangganId: pelanggan.id, periode },
+      })
+
+      if (existing) {
+        if (replaceExistingPending && existing.status === "PENDING") {
+          await prisma.targetOperasi.update({
+            where: { id: existing.id },
+            data: {
+              tipeAnomali: hit.tipeAnomali,
+              alasan: hit.alasan,
+              skor: hit.skor,
+            },
+          })
+          created++
+        } else {
+          skipped++
+        }
+        continue
+      }
+
+      await prisma.targetOperasi.create({
+        data: {
+          pelangganId: pelanggan.id,
+          tipeAnomali: hit.tipeAnomali,
+          alasan: hit.alasan,
+          skor: hit.skor,
+          periode,
+          status: "PENDING",
+          createdById: userId,
+        },
+      })
+      created++
+    }
+
+    // Update progress tiap batch
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: {
+        processed,
+        // Pakai field "created" untuk TO dibuat, "updated" untuk anomali terdeteksi
+        created,
+        updated: detected,
+        errors: skipped,
+      },
+    })
+  }
+
+  // Selesai
+  await prisma.importJob.update({
+    where: { id: jobId },
+    data: { status: "DONE", processed, created, updated: detected, errors: skipped },
+  })
+
+  await prisma.logAktivitas.create({
+    data: {
+      userId,
+      aksi: "GENERATE_TO",
+      detail: `Background Generate TO: ${pelangganList.length} dianalisis, ${detected} anomali, ${created} TO dibuat/diperbarui.`,
+    },
+  })
 }

@@ -120,15 +120,15 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Gagal generate")
 
-      toast.success("Generate TO selesai", {
-        description: `${result.analyzed} dianalisis, ${result.detected} anomali ditemukan, ${result.created} TO dibuat/diperbarui.`,
+      // API sekarang langsung return 202 — proses berjalan di background
+      toast.success("Generate TO dimulai di latar belakang", {
+        description: `${result.total.toLocaleString("id-ID")} pelanggan sedang dianalisis. Kamu bebas navigasi ke halaman lain.`,
+        duration: 5000,
       })
       setShowGenerateConfirm(false)
-      setPage(1)
-      fetchData()
     } catch (err) {
       console.error(err)
-      toast.error("Gagal generate TO", {
+      toast.error("Gagal memulai Generate TO", {
         description: err instanceof Error ? err.message : "Error",
       })
     } finally {
