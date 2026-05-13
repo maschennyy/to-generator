@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, CheckCircle2, XCircle, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -22,75 +22,95 @@ const TYPE_LABEL: Record<string, string> = {
 }
 
 export function ImportProgressBanner() {
-  const [jobs, setJobs] = useState<ImportJob[]>([])
+  const [jobs, setJobs] = useState<Map<string, ImportJob>>(new Map())
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+  const prevStatusRef = useRef<Map<string, string>>(new Map())
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchActiveJobs = useCallback(async () => {
-    try {
-      const res = await fetch("/api/import-jobs")
-      if (!res.ok) return
-      const data = await res.json()
-      setJobs(data.jobs ?? [])
-    } catch {
-      // silent fail
+  useEffect(() => {
+    let active = true
+
+    async function poll() {
+      if (!active) return
+
+      try {
+        // Ambil job aktif (PENDING/PROCESSING)
+        const res = await fetch("/api/import-jobs")
+        if (!res.ok) return
+
+        const data = await res.json()
+        const activeJobs: ImportJob[] = data.jobs ?? []
+
+        setJobs((prev) => {
+          const next = new Map(prev)
+
+          for (const job of activeJobs) {
+            next.set(job.id, job)
+          }
+
+          // Untuk job yang sudah tidak aktif tapi masih ditampilkan,
+          // fetch status finalnya sekali
+          return next
+        })
+
+        // Fetch status final untuk job yang sebelumnya PROCESSING tapi sudah hilang dari list aktif
+        const prevJobs = prevStatusRef.current
+        for (const [id, status] of prevJobs) {
+          if (status === "PROCESSING" && !activeJobs.find((j) => j.id === id)) {
+            // Job selesai — ambil data finalnya
+            fetch(`/api/import-jobs?jobId=${id}`)
+              .then((r) => r.json())
+              .then((job: ImportJob) => {
+                if (!active) return
+                setJobs((prev) => {
+                  const next = new Map(prev)
+                  next.set(job.id, job)
+                  return next
+                })
+                // Toast notifikasi
+                if (job.status === "DONE") {
+                  toast.success(`Import ${TYPE_LABEL[job.type] ?? job.type} selesai!`, {
+                    description: `${job.created} baru · ${job.updated} update${job.errors > 0 ? ` · ${job.errors} error` : ""}`,
+                  })
+                } else if (job.status === "FAILED") {
+                  toast.error(`Import ${TYPE_LABEL[job.type] ?? job.type} gagal`)
+                }
+              })
+              .catch(() => null)
+          }
+        }
+
+        // Simpan status saat ini untuk perbandingan di poll berikutnya
+        const newPrev = new Map<string, string>()
+        for (const job of activeJobs) {
+          newPrev.set(job.id, job.status)
+        }
+        prevStatusRef.current = newPrev
+
+      } catch {
+        // silent fail — jangan ganggu UI
+      } finally {
+        if (active) {
+          // Poll lebih lambat saat ada job aktif (5 detik), lebih jarang kalau tidak ada (15 detik)
+          // Ini drastis mengurangi beban server saat upload sedang berjalan
+          const hasActive = prevStatusRef.current.size > 0
+          timerRef.current = setTimeout(poll, hasActive ? 5000 : 15000)
+        }
+      }
+    }
+
+    poll()
+
+    return () => {
+      active = false
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
-  // Poll setiap 2 detik saat ada job aktif
-  useEffect(() => {
-    fetchActiveJobs()
-    const interval = setInterval(fetchActiveJobs, 2000)
-    return () => clearInterval(interval)
-  }, [fetchActiveJobs])
-
-  // Poll job yang sedang ditampilkan (termasuk DONE/FAILED untuk update terakhir)
-  const [trackedJobs, setTrackedJobs] = useState<ImportJob[]>([])
-
-  useEffect(() => {
-    const allJobIds = [...jobs.map((j) => j.id), ...trackedJobs.map((j) => j.id)]
-    const uniqueIds = [...new Set(allJobIds)]
-
-    if (uniqueIds.length === 0) return
-
-    const pollTracked = async () => {
-      const updated: ImportJob[] = []
-      for (const id of uniqueIds) {
-        if (dismissed.has(id)) continue
-        try {
-          const res = await fetch(`/api/import-jobs?jobId=${id}`)
-          if (!res.ok) continue
-          const job = await res.json()
-          updated.push(job)
-
-          // Toast notifikasi saat selesai
-          if (job.status === "DONE") {
-            const prev = trackedJobs.find((j) => j.id === id)
-            if (prev && prev.status !== "DONE") {
-              toast.success(`Import ${TYPE_LABEL[job.type] ?? job.type} selesai!`, {
-                description: `${job.created} baru, ${job.updated} update${job.errors > 0 ? `, ${job.errors} error` : ""}`,
-              })
-            }
-          } else if (job.status === "FAILED") {
-            const prev = trackedJobs.find((j) => j.id === id)
-            if (prev && prev.status !== "FAILED") {
-              toast.error(`Import ${TYPE_LABEL[job.type] ?? job.type} gagal!`)
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-      setTrackedJobs(updated)
-    }
-
-    const interval = setInterval(pollTracked, 2000)
-    pollTracked()
-    return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, dismissed])
-
-  const visibleJobs = trackedJobs.filter(
-    (j) => !dismissed.has(j.id) && (j.status === "PROCESSING" || j.status === "DONE" || j.status === "FAILED")
+  const visibleJobs = [...jobs.values()].filter(
+    (j) =>
+      !dismissed.has(j.id) &&
+      (j.status === "PROCESSING" || j.status === "PENDING" || j.status === "DONE" || j.status === "FAILED")
   )
 
   if (visibleJobs.length === 0) return null
@@ -100,47 +120,44 @@ export function ImportProgressBanner() {
       {visibleJobs.map((job) => {
         const pct = job.total > 0 ? Math.round((job.processed / job.total) * 100) : 0
         const label = TYPE_LABEL[job.type] ?? job.type
+        const isDone = job.status === "DONE"
+        const isFailed = job.status === "FAILED"
+        const isRunning = job.status === "PROCESSING" || job.status === "PENDING"
 
         return (
           <div
             key={job.id}
             className={`rounded-lg border shadow-lg p-4 bg-white dark:bg-slate-900 ${
-              job.status === "DONE"
+              isDone
                 ? "border-green-300 dark:border-green-800"
-                : job.status === "FAILED"
+                : isFailed
                 ? "border-red-300 dark:border-red-800"
                 : "border-blue-300 dark:border-blue-800"
             }`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                {job.status === "PROCESSING" && (
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />
-                )}
-                {job.status === "DONE" && (
-                  <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
-                )}
-                {job.status === "FAILED" && (
-                  <XCircle className="h-4 w-4 text-red-600 shrink-0" />
-                )}
+                {isRunning && <Loader2 className="h-4 w-4 animate-spin text-blue-600 shrink-0" />}
+                {isDone && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
+                {isFailed && <XCircle className="h-4 w-4 text-red-600 shrink-0" />}
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {job.status === "PROCESSING"
+                    {isRunning
                       ? `Mengimport ${label}...`
-                      : job.status === "DONE"
+                      : isDone
                       ? `Import ${label} selesai`
                       : `Import ${label} gagal`}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {job.status === "PROCESSING"
-                      ? `${job.processed} / ${job.total} data`
-                      : job.status === "DONE"
-                      ? `${job.created} baru · ${job.updated} update${job.errors > 0 ? ` · ${job.errors} error` : ""}`
+                    {isRunning
+                      ? `${job.processed.toLocaleString()} / ${job.total.toLocaleString()} data`
+                      : isDone
+                      ? `${job.created.toLocaleString()} baru · ${job.updated.toLocaleString()} update${job.errors > 0 ? ` · ${job.errors} error` : ""}`
                       : "Terjadi kesalahan"}
                   </p>
                 </div>
               </div>
-              {(job.status === "DONE" || job.status === "FAILED") && (
+              {(isDone || isFailed) && (
                 <button
                   onClick={() => setDismissed((prev) => new Set([...prev, job.id]))}
                   className="text-muted-foreground hover:text-foreground shrink-0"
@@ -150,11 +167,11 @@ export function ImportProgressBanner() {
               )}
             </div>
 
-            {job.status === "PROCESSING" && job.total > 0 && (
+            {isRunning && job.total > 0 && (
               <div className="mt-2">
                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5">
                   <div
-                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-500"
+                    className="bg-blue-600 h-1.5 rounded-full transition-all duration-1000"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
