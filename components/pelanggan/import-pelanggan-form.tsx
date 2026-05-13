@@ -103,11 +103,7 @@ export function ImportPelangganForm() {
         )
 
         const nama = String(
-          row["NAMA"] ??
-            row["Nama"] ??
-            row["nama"] ??
-            row["NAMA PELANGGAN"] ??
-            ""
+          row["NAMA"] ?? row["Nama"] ?? row["nama"] ?? row["NAMA PELANGGAN"] ?? ""
         ).trim()
 
         const alamat = String(
@@ -121,16 +117,10 @@ export function ImportPelangganForm() {
         ).trim()
 
         const tarif = String(
-          row["TARIF"] ??
-            row["Tarif"] ??
-            row["tarif"] ??
-            row["TRF"] ??
-            "R1"
+          row["TARIF"] ?? row["Tarif"] ?? row["tarif"] ?? row["TRF"] ?? "R1"
         ).trim()
 
-        const dayaRaw =
-          row["DAYA"] ?? row["Daya"] ?? row["daya"] ?? 900
-
+        const dayaRaw = row["DAYA"] ?? row["Daya"] ?? row["daya"] ?? 900
         const daya = Number(dayaRaw) || 900
 
         let status: "valid" | "invalid" = "valid"
@@ -150,16 +140,7 @@ export function ImportPelangganForm() {
           error = "Alamat kosong"
         }
 
-        return {
-          row: rowNum,
-          idPelanggan,
-          nama,
-          alamat,
-          tarif,
-          daya,
-          status,
-          error,
-        }
+        return { row: rowNum, idPelanggan, nama, alamat, tarif, daya, status, error }
       })
 
       setParsedData(parsed)
@@ -168,9 +149,7 @@ export function ImportPelangganForm() {
       const invalid = parsed.filter((r) => r.status === "invalid").length
 
       if (valid === 0) {
-        toast.error("Tidak ada data valid", {
-          description: `${invalid} baris error`,
-        })
+        toast.error("Tidak ada data valid", { description: `${invalid} baris error` })
       } else {
         toast.success(`File berhasil di-parse`, {
           description: `${valid} valid, ${invalid} error`,
@@ -195,6 +174,7 @@ export function ImportPelangganForm() {
 
     try {
       const payload = {
+        type: "PELANGGAN",
         data: validData.map((row) => ({
           idPelanggan: row.idPelanggan,
           nama: row.nama,
@@ -204,7 +184,8 @@ export function ImportPelangganForm() {
         })),
       }
 
-      const response = await fetch("/api/pelanggan", {
+      // Kirim ke background job API — langsung dapat jobId, tidak perlu tunggu selesai
+      const response = await fetch("/api/import-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -213,20 +194,20 @@ export function ImportPelangganForm() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || "Gagal import")
+        throw new Error(result.error || "Gagal memulai import")
       }
 
-      toast.success("Import pelanggan berhasil!", {
-        description: `${result.created} baru, ${result.updated} update${result.dataLengkapUpdated > 0 ? `, ${result.dataLengkapUpdated} jadi lengkap` : ""}`,
+      toast.success(`Import dimulai di latar belakang`, {
+        description: `${result.total} data sedang diproses. Kamu bisa navigasi ke halaman lain.`,
+        duration: 5000,
       })
 
+      // Langsung redirect — import terus berjalan di server
       router.push("/pelanggan")
-      router.refresh()
     } catch (error) {
       console.error(error)
-      toast.error("Gagal import data", {
-        description:
-          error instanceof Error ? error.message : "Terjadi kesalahan",
+      toast.error("Gagal memulai import", {
+        description: error instanceof Error ? error.message : "Terjadi kesalahan",
       })
       setIsImporting(false)
     }
@@ -261,15 +242,7 @@ export function ImportPelangganForm() {
     const worksheet = XLSX.utils.json_to_sheet(templateData)
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template Pelanggan")
-
-    worksheet["!cols"] = [
-      { wch: 15 },
-      { wch: 30 },
-      { wch: 40 },
-      { wch: 8 },
-      { wch: 10 },
-    ]
-
+    worksheet["!cols"] = [{ wch: 15 }, { wch: 30 }, { wch: 40 }, { wch: 8 }, { wch: 10 }]
     XLSX.writeFile(workbook, "template-pelanggan.xlsx")
     toast.success("Template berhasil diunduh")
   }
@@ -297,10 +270,9 @@ export function ImportPelangganForm() {
               <li><strong>DAYA</strong> — Daya dalam VA</li>
             </ul>
             <p className="text-xs text-blue-700 dark:text-blue-500 mt-2">
-              💡 Kalau IDPEL sudah ada, data akan di-UPDATE (tidak duplikat)
+              💡 Import berjalan di latar belakang — kamu bebas navigasi ke halaman lain
             </p>
           </div>
-
           <Button type="button" variant="outline" onClick={downloadTemplate}>
             <Download className="mr-2 h-4 w-4" />
             Download Template Excel
@@ -341,7 +313,7 @@ export function ImportPelangganForm() {
             </div>
           ) : (
             <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
-                            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3">
                 <FileSpreadsheet className="h-8 w-8 text-green-600" />
                 <div>
                   <p className="font-medium">{file.name}</p>
@@ -369,9 +341,7 @@ export function ImportPelangganForm() {
         <Card>
           <CardContent className="p-12 text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600 mb-3" />
-            <p className="text-sm text-muted-foreground">
-              Memproses file Excel...
-            </p>
+            <p className="text-sm text-muted-foreground">Memproses file Excel...</p>
           </CardContent>
         </Card>
       )}
@@ -418,21 +388,13 @@ export function ImportPelangganForm() {
                     <tr
                       key={row.row}
                       className={`border-b ${
-                        row.status === "invalid"
-                          ? "bg-red-50 dark:bg-red-950/20"
-                          : ""
+                        row.status === "invalid" ? "bg-red-50 dark:bg-red-950/20" : ""
                       }`}
                     >
-                      <td className="px-3 py-2 text-xs text-muted-foreground">
-                        {row.row}
-                      </td>
-                      <td className="px-3 py-2 text-sm font-mono">
-                        {row.idPelanggan || "-"}
-                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{row.row}</td>
+                      <td className="px-3 py-2 text-sm font-mono">{row.idPelanggan || "-"}</td>
                       <td className="px-3 py-2 text-sm">{row.nama || "-"}</td>
-                      <td className="px-3 py-2 text-sm truncate max-w-xs">
-                        {row.alamat || "-"}
-                      </td>
+                      <td className="px-3 py-2 text-sm truncate max-w-xs">{row.alamat || "-"}</td>
                       <td className="px-3 py-2 text-sm">{row.tarif}</td>
                       <td className="px-3 py-2 text-sm text-right">{row.daya}</td>
                       <td className="px-3 py-2 text-xs">
@@ -471,7 +433,7 @@ export function ImportPelangganForm() {
                 {isImporting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Mengimport...
+                    Memulai Import...
                   </>
                 ) : (
                   <>

@@ -52,24 +52,25 @@ model User {
 
   targetOperasi TargetOperasi[] @relation("CreatedBy")
   logAktivitas  LogAktivitas[]
+  importJobs    ImportJob[]
 
   @@map("users")
 }
 
 model Pelanggan {
-  id              String    @id @default(cuid())
-  idPelanggan     String    @unique
-  nama            String
-  tarif           String
-  daya            Int
-  lokasi          String
-  isToHistory     Boolean   @default(false)
-  dataLengkap     Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id          String   @id @default(cuid())
+  idPelanggan String   @unique
+  nama        String
+  tarif       String
+  daya        Int
+  lokasi      String
+  isToHistory Boolean  @default(false)
+  dataLengkap Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  pemakaian       Pemakaian[]
-  targetOperasi   TargetOperasi[]
+  pemakaian     Pemakaian[]
+  targetOperasi TargetOperasi[]
 
   @@map("pelanggan")
 }
@@ -134,7 +135,6 @@ model LogAktivitas {
   @@map("log_aktivitas")
 }
 
-
 model TOHistoris {
   id            String    @id @default(cuid())
   idPelanggan   String    @unique
@@ -145,14 +145,21 @@ model TOHistoris {
   @@map("to_historis")
 }
 
-model TargetOperasi {
-  id              String   @id @default(cuid())
-  id_pelanggan    String   @unique
-  nama_pelanggan  String
-  tarif           String
-  daya            Int
-  similarity_score Float   // Skor kemiripan dengan pola temuan (0-100%)
-  status          String   // Contoh: 'Draft', 'Siap Periksa', 'Sedang Proses'
-  kriteria_utama  String   // Alasan terpilih (misal: "Drop tegangan fasa T")
-  createdAt       DateTime @default(now())
+model ImportJob {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  status      String   @default("PENDING")
+  total       Int      @default(0)
+  processed   Int      @default(0)
+  created     Int      @default(0)
+  updated     Int      @default(0)
+  errors      Int      @default(0)
+  errorDetail String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("import_jobs")
 }
