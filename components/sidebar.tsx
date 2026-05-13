@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  History,
 } from "lucide-react"
 
 import {
@@ -55,6 +56,7 @@ export function Sidebar({ userRole }: SidebarProps) {
 
   const adminMenuItems = [
     { href: "/admin/users", label: "Manajemen User", icon: ShieldCheck },
+    { href: "/admin/log", label: "Log Aktivitas", icon: History },
   ]
 
   function isActive(href: string): boolean {
@@ -117,7 +119,7 @@ export function Sidebar({ userRole }: SidebarProps) {
             {!isCollapsed && (
               <div className="overflow-hidden">
                 <h1 className="text-base font-bold whitespace-nowrap">TO Generator</h1>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">PLN ICON+</p>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">Capstone Project 2026</p>
               </div>
             )}
           </div>

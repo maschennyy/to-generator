@@ -380,7 +380,12 @@ export function PelangganTable({ isAdmin }: PelangganTableProps) {
                       {(page - 1) * 20 + index + 1}
                     </td>
                     <td className="px-3 py-3 text-sm font-mono">
-                      {item.idPelanggan}
+                      <Link
+                        href={`/pelanggan/${item.id}`}
+                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 hover:underline"
+                      >
+                        {item.idPelanggan}
+                      </Link>
                     </td>
                     <td className="px-3 py-3 text-sm">
                       {item.nama ? (
