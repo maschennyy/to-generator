@@ -35,9 +35,9 @@ jobs:
       - name: Cek build
         run: npm run build
         env:
-          DATABASE_URL: ${{"postgresql://postgres:Unsada2026@localhost:5432/to_app_db?schema=public"}}
-          AUTH_SECRET: ${{"to-generator-unsada-2026-super-secret-key-change-this-in-production"}}
-          NEXTAUTH_URL: ${{"http://localhost:3000"}}
-          ML_SERVICE_URL: ${{"http://localhost:8000"}}
-          UPSTASH_REDIS_REST_URL: ${{"https://humble-tarpon-69939.upstash.io"}}
-          UPSTASH_REDIS_REST_TOKEN: ${{"gQAAAAAAAREzAAIgcDI3MjAxMmM4NjBhMzQ0MTcwYTlmYTExYWY2M2Y3OTlhMg"}}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
