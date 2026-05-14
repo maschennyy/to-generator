@@ -139,7 +139,7 @@ export function LogAktivitasClient() {
               />
             </div>
 
-            <Select value={aksiFilter} onValueChange={setAksiFilter}>
+            <Select value={aksiFilter} onValueChange={(value) => setAksiFilter(value ?? "")}>
               <SelectTrigger className="w-full md:w-48">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Semua Aksi" />
@@ -154,7 +154,7 @@ export function LogAktivitasClient() {
               </SelectContent>
             </Select>
 
-            <Select value={userFilter} onValueChange={setUserFilter}>
+            <Select value={userFilter} onValueChange={(value) => setUserFilter(value ?? "")}>
               <SelectTrigger className="w-full md:w-48">
                 <SelectValue placeholder="Semua User" />
               </SelectTrigger>

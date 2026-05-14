@@ -271,7 +271,10 @@ export function PelangganDetailClient({ id, isAdmin }: Props) {
                     tickFormatter={(v) => v.toLocaleString("id-ID")}
                   />
                   <Tooltip
-                    formatter={(v: number) => [`${v.toLocaleString("id-ID")} kWh`, "Pemakaian"]}
+                    formatter={(value) => [
+                      Number(value ?? 0).toLocaleString("id-ID"),
+                      "kWh",
+                    ]}
                     labelFormatter={(l) => `Periode: ${l}`}
                   />
                   <ReferenceLine

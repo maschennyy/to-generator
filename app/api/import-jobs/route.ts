@@ -203,8 +203,7 @@ async function processPelanggan(
               dataLengkap: row.dataLengkap,
             },
           })
-        ),
-        { timeout: 60000 }
+        )
       )
     }
 
@@ -313,11 +312,15 @@ async function processPemakaian(
       }
 
       // Upsert pemakaian
-      const upsertOps = validRows
-        .map((row) => {
-          const pelangganId = pelangganMap.get(row.idPelanggan)
-          if (!pelangganId) return null
-          return prisma.pemakaian.upsert({
+      const upsertOps = validRows.flatMap((row) => {
+        const pelangganId = pelangganMap.get(row.idPelanggan)
+
+        if (!pelangganId) {
+          return []
+        }
+
+        return [
+          prisma.pemakaian.upsert({
             where: {
               pelangganId_bulan_tahun: {
                 pelangganId,
@@ -325,11 +328,18 @@ async function processPemakaian(
                 tahun: row.tahun,
               },
             },
-            create: { pelangganId, bulan: row.bulan, tahun: row.tahun, kwh: row.kwh },
-            update: { kwh: row.kwh },
-          })
-        })
-        .filter(Boolean) as ReturnType<typeof prisma.pemakaian.upsert>[]
+            create: {
+              pelangganId,
+              bulan: row.bulan,
+              tahun: row.tahun,
+              kwh: row.kwh,
+            },
+            update: {
+              kwh: row.kwh,
+            },
+          }),
+        ]
+      })
 
       // Hitung created vs updated
       const existingPemakaian = await prisma.pemakaian.findMany({
@@ -357,7 +367,7 @@ async function processPemakaian(
       }
 
       if (upsertOps.length > 0) {
-        await prisma.$transaction(upsertOps, { timeout: 60000 })
+        await prisma.$transaction(upsertOps)
       }
     }
 
