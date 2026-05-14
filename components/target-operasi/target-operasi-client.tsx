@@ -529,24 +529,28 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               <Sparkles className="h-5 w-5 text-blue-600" />
               Jalankan Deteksi Target Operasi?
             </AlertDialogTitle>
+            <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-blue-600" />
+              Jalankan Deteksi Target Operasi?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              <div className="space-y-2">
-                <span className="block">
-                  Sistem akan menganalisis seluruh data pemakaian pelanggan dan mendeteksi pola anomali:
-                </span>
-                <ul className="list-disc pl-5 text-sm space-y-1">
-                  <li>Turun drastis &lt; 50% rata-rata 6 bulan</li>
-                  <li>Stagnan 3 bulan berturut-turut</li>
-                  <li>0 kWh selama 2 bulan</li>
-                  <li>Lonjakan &gt; 300% dari bulan sebelumnya</li>
-                  <li>Pola tidak wajar (zigzag, meter statis, penurunan bertahap)</li>
-                </ul>
-                <span className="block text-xs text-muted-foreground pt-2">
-                  Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke
-                  halaman lain. Progress ditampilkan di banner bawah.
-                </span>
-              </div>
+              Sistem akan menganalisis seluruh data pemakaian pelanggan dan mendeteksi 5 pola anomali secara otomatis.
             </AlertDialogDescription>
+            <div className="space-y-2 text-sm text-muted-foreground mt-2">
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Turun drastis &lt; 50% rata-rata 6 bulan</li>
+                <li>Stagnan 3 bulan berturut-turut</li>
+                <li>0 kWh selama 2 bulan</li>
+                <li>Lonjakan &gt; 300% dari bulan sebelumnya</li>
+                <li>Pola tidak wajar (zigzag, meter statis, penurunan bertahap)</li>
+              </ul>
+              <p className="text-xs pt-1">
+                Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke
+                halaman lain. Progress ditampilkan di banner bawah.
+              </p>
+            </div>
+          </AlertDialogHeader>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isGenerating}>Batal</AlertDialogCancel>

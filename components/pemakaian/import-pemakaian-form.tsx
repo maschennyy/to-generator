@@ -305,50 +305,41 @@ export function ImportPemakaianForm() {
       toast.error("Tidak ada data valid")
       return
     }
-
+ 
     setIsImporting(true)
-
+ 
     try {
       const payload = {
+        type: "PEMAKAIAN",
         data: validData.map((row) => ({
           idPelanggan: row.idPelanggan,
-          tarif: row.tarif,
-          daya: row.daya,
           bulan: row.bulan,
           tahun: row.tahun,
           kwh: row.kwh,
         })),
       }
-
-      const response = await fetch("/api/pemakaian", {
+ 
+      const response = await fetch("/api/import-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-
-      // Cek apakah response valid JSON
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text()
-        console.error("Non-JSON response:", text.substring(0, 500))
-        throw new Error(`Server error: response bukan JSON (status ${response.status})`)
-      }
-
+ 
       const result = await response.json()
-
+ 
       if (!response.ok) {
-        throw new Error(result.error || "Gagal import")
+        throw new Error(result.error || "Gagal memulai import")
       }
-
-      toast.success("Import pemakaian berhasil!", {
-        description: `${result.inserted + result.updated} data, ${result.pelangganAutoCreated || 0} pelanggan baru`,
+ 
+      toast.success("Import pemakaian dimulai di latar belakang", {
+        description: `${result.total.toLocaleString("id-ID")} data sedang diproses. Kamu bebas navigasi ke halaman lain.`,
+        duration: 5000,
       })
-
+ 
       router.push("/pemakaian")
-      router.refresh()
     } catch (error) {
       console.error("Import error:", error)
-      toast.error("Gagal import", {
+      toast.error("Gagal memulai import", {
         description: error instanceof Error ? error.message : "Error",
       })
       setIsImporting(false)

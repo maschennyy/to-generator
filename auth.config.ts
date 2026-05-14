@@ -1,39 +1,48 @@
 import type { NextAuthConfig } from "next-auth"
 
+// Semua route yang memerlukan login (selain /login itu sendiri)
+const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/pelanggan",
+  "/pemakaian",
+  "/target-operasi",
+  "/laporan",
+  "/master-data",
+  "/admin",
+]
+
 export const authConfig = {
   pages: {
     signIn: "/login",
   },
-  providers: [], // akan di-set di auth.ts
+  providers: [], // di-set di auth.ts
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user
-      const isOnLogin = nextUrl.pathname === "/login"
-      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard")
-      const isOnRoot = nextUrl.pathname === "/"
+      const pathname = nextUrl.pathname
 
-      // Login page
-      if (isOnLogin) {
+      // Halaman login
+      if (pathname === "/login") {
         if (isLoggedIn) {
           return Response.redirect(new URL("/dashboard", nextUrl))
         }
         return true
       }
 
-      // Root path - redirect based on login status
-      if (isOnRoot) {
-        if (isLoggedIn) {
-          return Response.redirect(new URL("/dashboard", nextUrl))
-        }
+      // Root path
+      if (pathname === "/") {
+        return Response.redirect(
+          new URL(isLoggedIn ? "/dashboard" : "/login", nextUrl)
+        )
+      }
+
+      // Cek apakah route perlu login
+      const isProtected = PROTECTED_PREFIXES.some((prefix) =>
+        pathname.startsWith(prefix)
+      )
+
+      if (isProtected && !isLoggedIn) {
         return Response.redirect(new URL("/login", nextUrl))
-      }
-
-      // Protected routes (dashboard, etc.)
-      if (isOnDashboard) {
-        if (!isLoggedIn) {
-          return Response.redirect(new URL("/login", nextUrl))
-        }
-        return true
       }
 
       return true
@@ -59,7 +68,7 @@ export const authConfig = {
   },
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60,
+    maxAge: 24 * 60 * 60, // 24 jam
   },
   trustHost: true,
 } satisfies NextAuthConfig
