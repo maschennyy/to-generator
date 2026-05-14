@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Cek TypeScript
+        run: npx tsc --noEmit
+
+      - name: Cek ESLint
+        run: npm run lint
+
+      - name: Cek build
+        run: npm run build
+        env:
+          DATABASE_URL: ${{"postgresql://postgres:Unsada2026@localhost:5432/to_app_db?schema=public"}}
+          AUTH_SECRET: ${{"to-generator-unsada-2026-super-secret-key-change-this-in-production"}}
+          NEXTAUTH_URL: ${{"http://localhost:3000"}}
+          ML_SERVICE_URL: ${{"http://localhost:8000"}}
+          UPSTASH_REDIS_REST_URL: ${{"https://humble-tarpon-69939.upstash.io"}}
+          UPSTASH_REDIS_REST_TOKEN: ${{"gQAAAAAAAREzAAIgcDI3MjAxMmM4NjBhMzQ0MTcwYTlmYTExYWY2M2Y3OTlhMg"}}
