@@ -15,6 +15,7 @@ import {
   XCircle,
   AlertTriangle,
   RefreshCw,
+  FileSpreadsheet,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -53,6 +54,7 @@ const TIPE_OPTIONS = [
   { value: "STAGNAN", label: "Stagnan" },
   { value: "NOL_PEMAKAIAN", label: "Nol Pemakaian" },
   { value: "LONJAKAN", label: "Lonjakan" },
+  { value: "POLA_TIDAK_WAJAR", label: "Pola Tidak Wajar" },
 ]
 
 const STATUS_OPTIONS = [
@@ -62,6 +64,21 @@ const STATUS_OPTIONS = [
   { value: "SELESAI", label: "Selesai" },
   { value: "DIBATALKAN", label: "Dibatalkan" },
 ]
+
+const TIPE_LABEL: Record<string, string> = {
+  TURUN_DRASTIS: "Turun Drastis",
+  STAGNAN: "Stagnan",
+  NOL_PEMAKAIAN: "Nol Pemakaian",
+  LONJAKAN: "Lonjakan",
+  POLA_TIDAK_WAJAR: "Pola Tidak Wajar",
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "Pending",
+  DIPROSES: "Diproses",
+  SELESAI: "Selesai",
+  DIBATALKAN: "Dibatalkan",
+}
 
 export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   const [data, setData] = useState<TargetOperasiItem[]>([])
@@ -77,6 +94,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -120,7 +138,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Gagal generate")
 
-      // API sekarang langsung return 202 — proses berjalan di background
+      // Background job — langsung return 202
       toast.success("Generate TO dimulai di latar belakang", {
         description: `${result.total.toLocaleString("id-ID")} pelanggan sedang dianalisis. Kamu bebas navigasi ke halaman lain.`,
         duration: 5000,
@@ -133,6 +151,177 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       })
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  async function handleExportExcel() {
+    setIsExporting(true)
+    try {
+      // Ambil SEMUA data sesuai filter aktif (tanpa pagination)
+      const params = new URLSearchParams({ search, limit: "9999", page: "1" })
+      if (filterStatus) params.append("status", filterStatus)
+      if (filterTipe) params.append("tipe", filterTipe)
+
+      const res = await fetch(`/api/target-operasi?${params}`)
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || "Gagal mengambil data")
+
+      const allData: TargetOperasiItem[] = result.data
+
+      if (allData.length === 0) {
+        toast.error("Tidak ada data untuk diekspor")
+        return
+      }
+
+      const XLSX = await import("xlsx")
+      const wb = XLSX.utils.book_new()
+
+      // ── Sheet 1: Daftar TO ──────────────────────────────────────────────────
+      const now = new Date()
+      const headerInfo = [
+        ["Daftar Target Operasi — TO Generator PLN ICON+"],
+        [
+          "Diekspor pada:",
+          now.toLocaleString("id-ID", {
+            day: "2-digit",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        ],
+        [
+          "Filter aktif:",
+          [
+            search ? `Pencarian: "${search}"` : "",
+            filterTipe ? `Tipe: ${TIPE_LABEL[filterTipe]}` : "",
+            filterStatus ? `Status: ${STATUS_LABEL[filterStatus]}` : "",
+          ]
+            .filter(Boolean)
+            .join(", ") || "Semua data",
+        ],
+        ["Total baris:", allData.length],
+        [],
+        [
+          "No",
+          "IDPEL",
+          "Nama Pelanggan",
+          "Tarif",
+          "Daya (VA)",
+          "Lokasi",
+          "Tipe Anomali",
+          "Alasan",
+          "Skor (%)",
+          "Status",
+          "Periode",
+          "TO Historis",
+          "Tanggal Generate",
+        ],
+        ...allData.map((item, i) => [
+          i + 1,
+          item.pelanggan.idPelanggan,
+          item.pelanggan.nama || "",
+          item.pelanggan.tarif,
+          item.pelanggan.daya,
+          item.pelanggan.lokasi,
+          TIPE_LABEL[item.tipeAnomali] ?? item.tipeAnomali,
+          item.alasan,
+          Math.round(item.skor * 100),
+          STATUS_LABEL[item.status] ?? item.status,
+          item.periode,
+          item.pelanggan.isToHistory ? "Ya" : "Tidak",
+          new Date(item.createdAt).toLocaleDateString("id-ID", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+        ]),
+      ]
+
+      const wsTO = XLSX.utils.aoa_to_sheet(headerInfo)
+      wsTO["!cols"] = [
+        { wch: 5 },   // No
+        { wch: 16 },  // IDPEL
+        { wch: 28 },  // Nama
+        { wch: 8 },   // Tarif
+        { wch: 10 },  // Daya
+        { wch: 28 },  // Lokasi
+        { wch: 20 },  // Tipe
+        { wch: 60 },  // Alasan
+        { wch: 10 },  // Skor
+        { wch: 12 },  // Status
+        { wch: 12 },  // Periode
+        { wch: 12 },  // TO Historis
+        { wch: 16 },  // Tanggal
+      ]
+      XLSX.utils.book_append_sheet(wb, wsTO, "Daftar TO")
+
+      // ── Sheet 2: Rekapitulasi per Tipe ──────────────────────────────────────
+      const rekapTipe = new Map<string, number>()
+      for (const item of allData) {
+        rekapTipe.set(item.tipeAnomali, (rekapTipe.get(item.tipeAnomali) ?? 0) + 1)
+      }
+
+      const rekapRows: (string | number)[][] = [
+        ["Rekapitulasi per Tipe Anomali"],
+        [],
+        ["Tipe Anomali", "Jumlah TO", "Persentase (%)"],
+        ...Array.from(rekapTipe.entries()).map(([tipe, count]) => [
+          TIPE_LABEL[tipe] ?? tipe,
+          count,
+          Math.round((count / allData.length) * 100),
+        ]),
+        [],
+        ["TOTAL", allData.length, 100],
+      ]
+
+      const wsRekap = XLSX.utils.aoa_to_sheet(rekapRows)
+      wsRekap["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 18 }]
+      XLSX.utils.book_append_sheet(wb, wsRekap, "Rekap Tipe")
+
+      // ── Sheet 3: Rekapitulasi per Status ────────────────────────────────────
+      const rekapStatus = new Map<string, number>()
+      for (const item of allData) {
+        rekapStatus.set(item.status, (rekapStatus.get(item.status) ?? 0) + 1)
+      }
+
+      const rekapStatusRows: (string | number)[][] = [
+        ["Rekapitulasi per Status"],
+        [],
+        ["Status", "Jumlah TO", "Persentase (%)"],
+        ...Array.from(rekapStatus.entries()).map(([status, count]) => [
+          STATUS_LABEL[status] ?? status,
+          count,
+          Math.round((count / allData.length) * 100),
+        ]),
+        [],
+        ["TOTAL", allData.length, 100],
+      ]
+
+      const wsStatus = XLSX.utils.aoa_to_sheet(rekapStatusRows)
+      wsStatus["!cols"] = [{ wch: 16 }, { wch: 14 }, { wch: 18 }]
+      XLSX.utils.book_append_sheet(wb, wsStatus, "Rekap Status")
+
+      // ── Nama file ────────────────────────────────────────────────────────────
+      const parts = ["TO"]
+      if (filterTipe) parts.push(TIPE_LABEL[filterTipe].replace(/\s/g, "-"))
+      if (filterStatus) parts.push(STATUS_LABEL[filterStatus])
+      if (search) parts.push(`cari-${search.slice(0, 10)}`)
+      const tgl = now.toISOString().slice(0, 10)
+      const filename = `${parts.join("_")}_${tgl}.xlsx`
+
+      XLSX.writeFile(wb, filename)
+
+      toast.success("Export Excel berhasil", {
+        description: `${allData.length.toLocaleString("id-ID")} TO diekspor ke 3 sheet`,
+      })
+    } catch (err) {
+      console.error(err)
+      toast.error("Gagal mengekspor Excel", {
+        description: err instanceof Error ? err.message : "Error",
+      })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -150,38 +339,16 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     setPage(1)
   }
 
+  const hasActiveFilters = search || filterStatus || filterTipe
+
   return (
     <div className="space-y-5">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard
-          label="Total TO"
-          value={stats?.total ?? 0}
-          icon={TargetIcon}
-          color="blue"
-          testid="stat-total"
-        />
-        <StatCard
-          label="Pending"
-          value={stats?.counts.PENDING ?? 0}
-          icon={Clock}
-          color="amber"
-          testid="stat-pending"
-        />
-        <StatCard
-          label="Diproses"
-          value={stats?.counts.DIPROSES ?? 0}
-          icon={Activity}
-          color="purple"
-          testid="stat-diproses"
-        />
-        <StatCard
-          label="Selesai"
-          value={stats?.counts.SELESAI ?? 0}
-          icon={CheckCircle2}
-          color="green"
-          testid="stat-selesai"
-        />
+        <StatCard label="Total TO" value={stats?.total ?? 0} icon={TargetIcon} color="blue" testid="stat-total" />
+        <StatCard label="Pending" value={stats?.counts.PENDING ?? 0} icon={Clock} color="amber" testid="stat-pending" />
+        <StatCard label="Diproses" value={stats?.counts.DIPROSES ?? 0} icon={Activity} color="purple" testid="stat-diproses" />
+        <StatCard label="Selesai" value={stats?.counts.SELESAI ?? 0} icon={CheckCircle2} color="green" testid="stat-selesai" />
       </div>
 
       {/* Action bar */}
@@ -203,76 +370,73 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
           </Button>
         </form>
 
-        {canGenerate && (
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Export Excel — selalu tampil jika ada data */}
           <Button
-            onClick={() => setShowGenerateConfirm(true)}
-            disabled={isGenerating}
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-            data-testid="generate-to-button"
+            variant="outline"
+            onClick={handleExportExcel}
+            disabled={isExporting || total === 0}
+            className="border-green-600 text-green-700 hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-950/30"
           >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Menganalisis...
-              </>
+            {isExporting ? (
+              <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyiapkan...</>
             ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Generate TO
-              </>
+              <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel{hasActiveFilters ? " (Terfilter)" : ""}</>
             )}
           </Button>
-        )}
+
+          {canGenerate && (
+            <Button
+              onClick={() => setShowGenerateConfirm(true)}
+              disabled={isGenerating}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+              data-testid="generate-to-button"
+            >
+              {isGenerating ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menganalisis...</>
+              ) : (
+                <><Sparkles className="mr-2 h-4 w-4" />Generate TO</>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={filterStatus}
-          onChange={(e) => {
-            setFilterStatus(e.target.value)
-            setPage(1)
-          }}
+          onChange={(e) => { setFilterStatus(e.target.value); setPage(1) }}
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
           data-testid="filter-status"
         >
           {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
 
         <select
           value={filterTipe}
-          onChange={(e) => {
-            setFilterTipe(e.target.value)
-            setPage(1)
-          }}
+          onChange={(e) => { setFilterTipe(e.target.value); setPage(1) }}
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
           data-testid="filter-tipe"
         >
           {TIPE_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
 
-        {(search || filterStatus || filterTipe) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={resetFilters}
-            data-testid="reset-filters-button"
-          >
+        {hasActiveFilters && (
+          <Button variant="outline" size="sm" onClick={resetFilters} data-testid="reset-filters-button">
             <RefreshCw className="h-3 w-3 mr-1" />
             Reset
           </Button>
         )}
 
         <span className="ml-auto text-sm text-muted-foreground">
-          Menampilkan {data.length} dari {total} TO
+          {hasActiveFilters
+            ? `${total.toLocaleString("id-ID")} TO (terfilter)`
+            : `${total.toLocaleString("id-ID")} TO`}
         </span>
       </div>
 
@@ -288,11 +452,13 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             <TargetIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
             <p className="font-medium">Belum ada Target Operasi</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-              {canGenerate
-                ? "Klik tombol Generate TO di atas untuk menjalankan deteksi anomali otomatis terhadap data pemakaian pelanggan."
+              {hasActiveFilters
+                ? "Tidak ada TO yang cocok dengan filter ini. Coba ubah atau reset filter."
+                : canGenerate
+                ? "Klik tombol Generate TO untuk menjalankan deteksi anomali otomatis."
                 : "Hubungi Admin atau SPV untuk men-generate Target Operasi."}
             </p>
-            {canGenerate && (
+            {canGenerate && !hasActiveFilters && (
               <Button
                 className="mt-4 bg-blue-600 hover:bg-blue-700"
                 onClick={() => setShowGenerateConfirm(true)}
@@ -343,23 +509,11 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             Halaman {page} dari {totalPages}
           </p>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => p - 1)}
-              disabled={page === 1}
-              data-testid="to-page-prev"
-            >
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1} data-testid="to-page-prev">
               <ChevronLeft className="h-4 w-4" />
               Sebelumnya
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={page === totalPages}
-              data-testid="to-page-next"
-            >
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} data-testid="to-page-next">
               Berikutnya
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -368,10 +522,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       )}
 
       {/* Generate Confirm Dialog */}
-      <AlertDialog
-        open={showGenerateConfirm}
-        onOpenChange={setShowGenerateConfirm}
-      >
+      <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
         <AlertDialogContent data-testid="generate-confirm-dialog">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -381,19 +532,18 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             <AlertDialogDescription>
               <div className="space-y-2">
                 <span className="block">
-                  Sistem akan menganalisis seluruh data pemakaian pelanggan dan
-                  mendeteksi pola anomali berikut:
+                  Sistem akan menganalisis seluruh data pemakaian pelanggan dan mendeteksi pola anomali:
                 </span>
                 <ul className="list-disc pl-5 text-sm space-y-1">
                   <li>Turun drastis &lt; 50% rata-rata 6 bulan</li>
                   <li>Stagnan 3 bulan berturut-turut</li>
                   <li>0 kWh selama 2 bulan</li>
                   <li>Lonjakan &gt; 300% dari bulan sebelumnya</li>
+                  <li>Pola tidak wajar (zigzag, meter statis, penurunan bertahap)</li>
                 </ul>
                 <span className="block text-xs text-muted-foreground pt-2">
-                  TO yang masih <strong>PENDING</strong> akan diperbarui dengan
-                  hasil terbaru. Yang sudah <strong>DIPROSES/SELESAI</strong>{" "}
-                  tidak akan tersentuh.
+                  Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke
+                  halaman lain. Progress ditampilkan di banner bawah.
                 </span>
               </div>
             </AlertDialogDescription>
@@ -407,15 +557,9 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               data-testid="confirm-generate-button"
             >
               {isGenerating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Menganalisis...
-                </>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Memulai...</>
               ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Jalankan Sekarang
-                </>
+                <><Sparkles className="mr-2 h-4 w-4" />Jalankan Sekarang</>
               )}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -426,11 +570,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
 }
 
 function StatCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-  testid,
+  label, value, icon: Icon, color, testid,
 }: {
   label: string
   value: number
@@ -450,9 +590,7 @@ function StatCard({
       <CardContent className="p-5">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-muted-foreground">{label}</p>
-          <div
-            className={`h-9 w-9 rounded-lg flex items-center justify-center ${colorMap[color]}`}
-          >
+          <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${colorMap[color]}`}>
             <Icon className="h-4 w-4" />
           </div>
         </div>
@@ -462,5 +600,4 @@ function StatCard({
   )
 }
 
-// Re-export for clarity
 export { AlertTriangle, XCircle }
