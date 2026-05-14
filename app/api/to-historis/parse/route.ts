@@ -29,11 +29,12 @@ export async function POST(req: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer()
 
-    const buffer = Uint8Array.from(new Uint8Array(arrayBuffer))
-
+    const buffer = Buffer.from(arrayBuffer)
+    
     const workbook = new ExcelJS.Workbook()
 
-    await workbook.xlsx.load(buffer as any)
+    // @ts-expect-error: Mengabaikan mismatch tipe Buffer Node.js terbaru dengan ExcelJS
+    await workbook.xlsx.load(buffer);
 
     const worksheet = workbook.worksheets[0]
 

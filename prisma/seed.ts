@@ -19,8 +19,8 @@ function generatePemakaian(
 ): { bulan: number; tahun: number; kwh: number }[] {
   const result: { bulan: number; tahun: number; kwh: number }[] = []
   const now = new Date()
-  let currentMonth = now.getMonth() + 1 // 1-12
-  let currentYear = now.getFullYear()
+  const currentMonth = now.getMonth() + 1 // 1-12
+  const currentYear = now.getFullYear()
 
   // Hitung titik awal (mundur `months` bulan dari sekarang)
   for (let i = months - 1; i >= 0; i--) {
