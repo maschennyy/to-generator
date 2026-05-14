@@ -3,7 +3,6 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import * as XLSX from "xlsx"
 import {
   Upload,
   FileSpreadsheet,
@@ -133,167 +132,42 @@ export function ImportPemakaianForm() {
   }
 
   async function parseExcel(file: File) {
-    setIsParsing(true)
-    setParsedData([])
+  setIsParsing(true)
+  setParsedData([])
 
     try {
-      // Load pelanggan untuk lookup
-      const pelangganResponse = await fetch("/api/pelanggan?limit=10000")
-      if (!pelangganResponse.ok) {
-        throw new Error(`Gagal load data pelanggan (${pelangganResponse.status})`)
-      }
-      const pelangganData = await pelangganResponse.json()
-      const pelangganMap = new Map<
-        string,
-        { nama: string; lokasi: string; tarif: string; daya: number; dataLengkap: boolean }
-      >()
+      const formData = new FormData()
 
-      if (pelangganData.data && Array.isArray(pelangganData.data)) {
-        pelangganData.data.forEach((p: {
-          idPelanggan: string
-          nama: string
-          lokasi: string
-          tarif: string
-          daya: number
-          dataLengkap: boolean
-        }) => {
-          pelangganMap.set(p.idPelanggan, {
-            nama: p.nama,
-            lokasi: p.lokasi,
-            tarif: p.tarif,
-            daya: p.daya,
-            dataLengkap: p.dataLengkap,
-          })
-        })
-      }
+      formData.append("file", file)
 
-      // Load TO Historis
-      const toResponse = await fetch("/api/to-historis?limit=10000")
-      const toSet = new Set<string>()
-
-      if (toResponse.ok) {
-        const toData = await toResponse.json()
-        if (toData.data && Array.isArray(toData.data)) {
-          toData.data.forEach((t: { idPelanggan: string }) => {
-            toSet.add(t.idPelanggan)
-          })
-        }
-      }
-
-      // Read Excel
-      const arrayBuffer = await file.arrayBuffer()
-      const workbook = XLSX.read(arrayBuffer, {
-        type: "array",
-        cellDates: true,
-      })
-      const sheetName = workbook.SheetNames[0]
-      const sheet = workbook.Sheets[sheetName]
-      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
-
-      if (jsonData.length === 0) {
-        toast.error("File kosong")
-        setIsParsing(false)
-        return
-      }
-
-      const parsed: ParsedRow[] = jsonData.map((row, index) => {
-        const rowNum = index + 2
-
-        const idPelanggan = cleanIdPelanggan(
-          String(
-            row["IDPEL"] ??
-              row["idPelanggan"] ??
-              row["ID Pelanggan"] ??
-              ""
-          )
-        )
-
-        const tarif = String(
-          row["TRF"] ?? row["TARIF"] ?? row["tarif"] ?? "R1"
-        ).trim()
-
-        const dayaRaw =
-          row["DAYA"] ?? row["Daya"] ?? row["daya"] ?? 900
-        const daya = Number(dayaRaw) || 900
-
-        const blthValue = row["BLTH REK"] ?? row["BLTH_REK"] ?? row["Periode"]
-
-        let bulan = 0
-        let tahun = 0
-
-        const parsed = parseBulanTahun(blthValue)
-        if (parsed) {
-          bulan = parsed.bulan
-          tahun = parsed.tahun
-        } else {
-          // Fallback: cek bulan & tahun terpisah
-          bulan = Number(row["Bulan"] ?? row["bulan"]) || 0
-          tahun = Number(row["Tahun"] ?? row["tahun"]) || 0
-        }
-
-        const kwhRaw =
-          row["PEMKWH"] ??
-          row["kWh"] ??
-          row["KWH"] ??
-          row["Pemakaian"]
-        const kwh = Number(kwhRaw)
-
-        const pelangganInfo = pelangganMap.get(idPelanggan)
-        const isToHistory = toSet.has(idPelanggan)
-        const dataLengkap = !!(pelangganInfo?.dataLengkap)
-
-        let status: "valid" | "invalid" = "valid"
-        let error: string | undefined
-
-        if (!idPelanggan) {
-          status = "invalid"
-          error = "IDPEL kosong"
-        } else if (!/^\d+$/.test(idPelanggan)) {
-          status = "invalid"
-          error = "IDPEL harus angka"
-        } else if (!bulan || bulan < 1 || bulan > 12) {
-          status = "invalid"
-          error = `Bulan tidak valid`
-        } else if (!tahun || tahun < 2020 || tahun > 2030) {
-          status = "invalid"
-          error = `Tahun tidak valid`
-        } else if (isNaN(kwh) || kwh < 0) {
-          status = "invalid"
-          error = `kWh tidak valid`
-        }
-
-        return {
-          row: rowNum,
-          idPelanggan,
-          nama: pelangganInfo?.nama,
-          tarif: pelangganInfo?.tarif || tarif,
-          daya: pelangganInfo?.daya || daya,
-          bulan,
-          tahun,
-          kwh,
-          isToHistory,
-          dataLengkap,
-          status,
-          error,
-        }
+      const response = await fetch("/api/pemakaian/parse", {
+        method: "POST",
+        body: formData,
       })
 
-      setParsedData(parsed)
+      const result = await response.json()
 
-      const valid = parsed.filter((r) => r.status === "valid").length
-      const invalid = parsed.filter((r) => r.status === "invalid").length
-      const noDil = parsed.filter((r) => r.status === "valid" && !r.dataLengkap).length
-
-      if (valid === 0) {
-        toast.error("Tidak ada data valid")
-      } else {
-        toast.success(`${valid} valid, ${invalid} error${noDil > 0 ? `, ${noDil} pelanggan belum lengkap` : ""}`)
+      if (!response.ok) {
+        throw new Error(result.message || "Gagal parse")
       }
+
+      setParsedData(result.data)
+
+      const valid = result.data.filter(
+        (r: ParsedRow) => r.status === "valid"
+      ).length
+
+      const invalid = result.data.filter(
+        (r: ParsedRow) => r.status === "invalid"
+      ).length
+
+      toast.success(
+        `${valid} valid, ${invalid} error`
+      )
     } catch (error) {
-      console.error("Parse error:", error)
-      toast.error("Gagal membaca file", {
-        description: error instanceof Error ? error.message : "Unknown error",
-      })
+      console.error(error)
+
+      toast.error("Gagal membaca file")
     } finally {
       setIsParsing(false)
     }
@@ -355,16 +229,8 @@ export function ImportPemakaianForm() {
   }
 
   function downloadTemplate() {
-    const templateData = [
-      { IDPEL: "5461009543", TRF: "R1", DAYA: 900, "BLTH REK": "Jan-26", PEMKWH: 250 },
-      { IDPEL: "5461009544", TRF: "B2", DAYA: 2200, "BLTH REK": "Jan-26", PEMKWH: 450 },
-    ]
+    window.open("/templates/template-pemakaian.xlsx", "_blank")
 
-    const worksheet = XLSX.utils.json_to_sheet(templateData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Pemakaian")
-    worksheet["!cols"] = [{ wch: 15 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 10 }]
-    XLSX.writeFile(workbook, "template-pemakaian.xlsx")
     toast.success("Template berhasil diunduh")
   }
 

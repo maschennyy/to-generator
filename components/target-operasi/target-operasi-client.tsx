@@ -155,165 +155,40 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   }
 
   async function handleExportExcel() {
-    setIsExporting(true)
-    try {
-      // Ambil SEMUA data sesuai filter aktif (tanpa pagination)
-      const params = new URLSearchParams({ search, limit: "9999", page: "1" })
-      if (filterStatus) params.append("status", filterStatus)
-      if (filterTipe) params.append("tipe", filterTipe)
+  setIsExporting(true)
+  try {
+    const params = new URLSearchParams({ search, limit: "9999", page: "1" })
+    if (filterStatus) params.append("status", filterStatus)
+    if (filterTipe) params.append("tipe", filterTipe)
 
-      const res = await fetch(`/api/target-operasi?${params}`)
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || "Gagal mengambil data")
+    const res = await fetch(`/api/target-operasi?${params}`)
+    const result = await res.json()
+    if (!res.ok) throw new Error(result.error || "Gagal mengambil data")
 
-      const allData: TargetOperasiItem[] = result.data
+    const allData: TargetOperasiItem[] = result.data
+    if (allData.length === 0) {
+      toast.error("Tidak ada data untuk diekspor")
+      return
+    }
 
-      if (allData.length === 0) {
-        toast.error("Tidak ada data untuk diekspor")
-        return
-      }
+    const response = await fetch("/api/target-operasi/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ allData, search, filterTipe, filterStatus }),
+    })
 
-      const XLSX = await import("xlsx")
-      const wb = XLSX.utils.book_new()
+    if (!response.ok) throw new Error("Gagal mengekspor")
 
-      // ── Sheet 1: Daftar TO ──────────────────────────────────────────────────
-      const now = new Date()
-      const headerInfo = [
-        ["Daftar Target Operasi — TO Generator PLN ICON+"],
-        [
-          "Diekspor pada:",
-          now.toLocaleString("id-ID", {
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        ],
-        [
-          "Filter aktif:",
-          [
-            search ? `Pencarian: "${search}"` : "",
-            filterTipe ? `Tipe: ${TIPE_LABEL[filterTipe]}` : "",
-            filterStatus ? `Status: ${STATUS_LABEL[filterStatus]}` : "",
-          ]
-            .filter(Boolean)
-            .join(", ") || "Semua data",
-        ],
-        ["Total baris:", allData.length],
-        [],
-        [
-          "No",
-          "IDPEL",
-          "Nama Pelanggan",
-          "Tarif",
-          "Daya (VA)",
-          "Lokasi",
-          "Tipe Anomali",
-          "Alasan",
-          "Skor (%)",
-          "Status",
-          "Periode",
-          "TO Historis",
-          "Tanggal Generate",
-        ],
-        ...allData.map((item, i) => [
-          i + 1,
-          item.pelanggan.idPelanggan,
-          item.pelanggan.nama || "",
-          item.pelanggan.tarif,
-          item.pelanggan.daya,
-          item.pelanggan.lokasi,
-          TIPE_LABEL[item.tipeAnomali] ?? item.tipeAnomali,
-          item.alasan,
-          Math.round(item.skor * 100),
-          STATUS_LABEL[item.status] ?? item.status,
-          item.periode,
-          item.pelanggan.isToHistory ? "Ya" : "Tidak",
-          new Date(item.createdAt).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
-        ]),
-      ]
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `TO_${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
 
-      const wsTO = XLSX.utils.aoa_to_sheet(headerInfo)
-      wsTO["!cols"] = [
-        { wch: 5 },   // No
-        { wch: 16 },  // IDPEL
-        { wch: 28 },  // Nama
-        { wch: 8 },   // Tarif
-        { wch: 10 },  // Daya
-        { wch: 28 },  // Lokasi
-        { wch: 20 },  // Tipe
-        { wch: 60 },  // Alasan
-        { wch: 10 },  // Skor
-        { wch: 12 },  // Status
-        { wch: 12 },  // Periode
-        { wch: 12 },  // TO Historis
-        { wch: 16 },  // Tanggal
-      ]
-      XLSX.utils.book_append_sheet(wb, wsTO, "Daftar TO")
-
-      // ── Sheet 2: Rekapitulasi per Tipe ──────────────────────────────────────
-      const rekapTipe = new Map<string, number>()
-      for (const item of allData) {
-        rekapTipe.set(item.tipeAnomali, (rekapTipe.get(item.tipeAnomali) ?? 0) + 1)
-      }
-
-      const rekapRows: (string | number)[][] = [
-        ["Rekapitulasi per Tipe Anomali"],
-        [],
-        ["Tipe Anomali", "Jumlah TO", "Persentase (%)"],
-        ...Array.from(rekapTipe.entries()).map(([tipe, count]) => [
-          TIPE_LABEL[tipe] ?? tipe,
-          count,
-          Math.round((count / allData.length) * 100),
-        ]),
-        [],
-        ["TOTAL", allData.length, 100],
-      ]
-
-      const wsRekap = XLSX.utils.aoa_to_sheet(rekapRows)
-      wsRekap["!cols"] = [{ wch: 24 }, { wch: 14 }, { wch: 18 }]
-      XLSX.utils.book_append_sheet(wb, wsRekap, "Rekap Tipe")
-
-      // ── Sheet 3: Rekapitulasi per Status ────────────────────────────────────
-      const rekapStatus = new Map<string, number>()
-      for (const item of allData) {
-        rekapStatus.set(item.status, (rekapStatus.get(item.status) ?? 0) + 1)
-      }
-
-      const rekapStatusRows: (string | number)[][] = [
-        ["Rekapitulasi per Status"],
-        [],
-        ["Status", "Jumlah TO", "Persentase (%)"],
-        ...Array.from(rekapStatus.entries()).map(([status, count]) => [
-          STATUS_LABEL[status] ?? status,
-          count,
-          Math.round((count / allData.length) * 100),
-        ]),
-        [],
-        ["TOTAL", allData.length, 100],
-      ]
-
-      const wsStatus = XLSX.utils.aoa_to_sheet(rekapStatusRows)
-      wsStatus["!cols"] = [{ wch: 16 }, { wch: 14 }, { wch: 18 }]
-      XLSX.utils.book_append_sheet(wb, wsStatus, "Rekap Status")
-
-      // ── Nama file ────────────────────────────────────────────────────────────
-      const parts = ["TO"]
-      if (filterTipe) parts.push(TIPE_LABEL[filterTipe].replace(/\s/g, "-"))
-      if (filterStatus) parts.push(STATUS_LABEL[filterStatus])
-      if (search) parts.push(`cari-${search.slice(0, 10)}`)
-      const tgl = now.toISOString().slice(0, 10)
-      const filename = `${parts.join("_")}_${tgl}.xlsx`
-
-      XLSX.writeFile(wb, filename)
-
-      toast.success("Export Excel berhasil", {
-        description: `${allData.length.toLocaleString("id-ID")} TO diekspor ke 3 sheet`,
+    toast.success("Export Excel berhasil", {
+      description: `${allData.length.toLocaleString("id-ID")} TO diekspor ke 3 sheet`,
       })
     } catch (err) {
       console.error(err)

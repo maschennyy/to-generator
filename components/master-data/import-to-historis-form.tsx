@@ -3,7 +3,6 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import * as XLSX from "xlsx"
 import {
   Upload,
   FileSpreadsheet,
@@ -96,78 +95,37 @@ export function ImportToHistorisForm() {
     setParsedData([])
 
     try {
-      const arrayBuffer = await file.arrayBuffer()
-      const workbook = XLSX.read(arrayBuffer, {
-        type: "array",
-        cellDates: true,
-      })
-      const sheetName = workbook.SheetNames[0]
-      const sheet = workbook.Sheets[sheetName]
-      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
+      const formData = new FormData()
 
-      if (jsonData.length === 0) {
-        toast.error("File kosong")
-        setIsParsing(false)
-        return
-      }
+      formData.append("file", file)
 
-      const parsed: ParsedRow[] = jsonData.map((row, index) => {
-        const rowNum = index + 2
-
-        const idPelanggan = cleanIdPelanggan(
-          String(
-            row["IDPEL"] ??
-              row["idPelanggan"] ??
-              row["ID Pelanggan"] ??
-              ""
-          )
-        )
-
-        const tanggalTemuan = parseDate(
-          row["TANGGAL TEMUAN"] ??
-            row["Tanggal Temuan"] ??
-            row["tanggalTemuan"] ??
-            row["TGL"] ??
-            null
-        )
-
-        const kategoriRaw =
-          row["KATEGORI"] ?? row["Kategori"] ?? row["kategori"] ?? null
-        const kategori = kategoriRaw ? String(kategoriRaw).trim() : null
-
-        let status: "valid" | "invalid" = "valid"
-        let error: string | undefined
-
-        if (!idPelanggan) {
-          status = "invalid"
-          error = "IDPEL kosong"
-        } else if (!/^\d+$/.test(idPelanggan)) {
-          status = "invalid"
-          error = "IDPEL harus angka"
-        }
-
-        return {
-          row: rowNum,
-          idPelanggan,
-          tanggalTemuan,
-          kategori,
-          status,
-          error,
-        }
+      const response = await fetch("/api/to-historis/parse", {
+        method: "POST",
+        body: formData,
       })
 
-      setParsedData(parsed)
+      const result = await response.json()
 
-      const valid = parsed.filter((r) => r.status === "valid").length
-      const invalid = parsed.filter((r) => r.status === "invalid").length
-
-      if (valid === 0) {
-        toast.error("Tidak ada data valid")
-      } else {
-        toast.success(`${valid} data valid siap di-import`)
+      if (!response.ok) {
+        throw new Error(result.message || "Gagal parse file")
       }
+
+      setParsedData(result.data)
+
+      const valid = result.data.filter(
+        (row: ParsedRow) => row.status === "valid"
+      ).length
+
+      const invalid = result.data.filter(
+        (row: ParsedRow) => row.status === "invalid"
+      ).length
+
+      toast.success(
+        `${valid} valid, ${invalid} error`
+      )
     } catch (error) {
       console.error(error)
+
       toast.error("Gagal membaca file Excel")
     } finally {
       setIsParsing(false)
@@ -228,26 +186,8 @@ export function ImportToHistorisForm() {
   }
 
   function downloadTemplate() {
-    const templateData = [
-      {
-        IDPEL: "5461009543",
-        "TANGGAL TEMUAN": new Date(2024, 5, 15),
-        KATEGORI: "Pencurian Listrik",
-      },
-      {
-        IDPEL: "5461009544",
-        "TANGGAL TEMUAN": new Date(2024, 8, 20),
-        KATEGORI: "Meter Rusak",
-      },
-    ]
+    window.open("/templates/template-to-historis.xlsx", "_blank")
 
-    const worksheet = XLSX.utils.json_to_sheet(templateData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "TO Historis Template")
-
-    worksheet["!cols"] = [{ wch: 15 }, { wch: 18 }, { wch: 25 }]
-
-    XLSX.writeFile(workbook, "template-to-historis.xlsx")
     toast.success("Template berhasil diunduh")
   }
 

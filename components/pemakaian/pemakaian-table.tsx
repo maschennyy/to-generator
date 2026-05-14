@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Download,
 } from "lucide-react"
-import * as XLSX from "xlsx"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -94,65 +93,29 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
   }
 
   async function handleDownload() {
-    try {
-      toast.info("Menyiapkan data...")
+  try {
+    toast.info("Menyiapkan data...")
 
-      const params = new URLSearchParams({
-        search,
-        export: "true",
-      })
-      const response = await fetch(`/api/pemakaian?${params}`)
-      const result = await response.json()
+    const params = new URLSearchParams({ search })
+    const response = await fetch(`/api/pemakaian/export?${params}`)
 
-      if (!response.ok) throw new Error(result.error)
+    if (!response.ok) throw new Error("Gagal mengunduh")
 
-      const allData: PemakaianData[] = result.data
-      const allMonths: Month[] = result.months
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    const today = new Date().toISOString().slice(0, 10)
+    a.href = url
+    a.download = `data-pemakaian-${today}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
 
-      const headers = [
-        "No",
-        "ID Pelanggan",
-        "Nama",
-        "Tarif",
-        "Daya (VA)",
-        ...allMonths.map((m) => formatBulanTahun(m.bulan, m.tahun)),
-        "Rata-rata",
-      ]
-
-      const rows = allData.map((item, index) => [
-        index + 1,
-        item.idPelanggan,
-        item.nama,
-        item.tarif,
-        item.daya,
-        ...item.pemakaian.map((p) => (p.kwh !== null ? p.kwh : "-")),
-        item.rataRata,
-      ])
-
-      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows])
-
-      worksheet["!cols"] = [
-        { wch: 5 },
-        { wch: 15 },
-        { wch: 25 },
-        { wch: 8 },
-        { wch: 10 },
-        ...allMonths.map(() => ({ wch: 12 })),
-        { wch: 10 },
-      ]
-
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Data Pemakaian")
-
-      const today = new Date().toISOString().slice(0, 10)
-      XLSX.writeFile(workbook, `data-pemakaian-${today}.xlsx`)
-
-      toast.success(`${allData.length} data berhasil diunduh`)
-    } catch (error) {
-      console.error(error)
-      toast.error("Gagal mengunduh data")
-    }
+    toast.success("Data berhasil diunduh")
+  } catch (error) {
+    console.error(error)
+    toast.error("Gagal mengunduh data")
   }
+}
 
   function getCellClass(kwh: number | null): string {
     if (kwh === null) return "text-muted-foreground italic text-center"

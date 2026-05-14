@@ -3,6 +3,8 @@ import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 import { authConfig } from "./auth.config"
+import { loginRatelimit } from "@/lib/ratelimit"  // ← tambahkan ini
+import { headers } from "next/headers"             // ← tambahkan ini
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -16,6 +18,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
           return null
+        }
+
+        const headersList = await headers()
+        const ip = headersList.get("x-forwarded-for") ?? "anonymous"
+        const { success } = await loginRatelimit.limit(ip)
+        if (!success) {
+          throw new Error("Terlalu banyak percobaan login. Coba lagi dalam 15 menit.")
         }
 
         const username = credentials.username as string

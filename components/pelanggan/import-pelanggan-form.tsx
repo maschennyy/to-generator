@@ -3,7 +3,6 @@
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import * as XLSX from "xlsx"
 import {
   Upload,
   FileSpreadsheet,
@@ -72,91 +71,45 @@ export function ImportPelangganForm() {
   }
 
   async function parseExcel(file: File) {
-    setIsParsing(true)
-    setParsedData([])
+  setIsParsing(true)
+  setParsedData([])
 
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const workbook = XLSX.read(arrayBuffer, { type: "array" })
-      const sheetName = workbook.SheetNames[0]
-      const sheet = workbook.Sheets[sheetName]
-      const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet)
+  try {
+    const formData = new FormData()
 
-      if (jsonData.length === 0) {
-        toast.error("File kosong")
-        setIsParsing(false)
-        return
-      }
+    formData.append("file", file)
 
-      const parsed: ParsedRow[] = jsonData.map((row, index) => {
-        const rowNum = index + 2
+    const response = await fetch("/api/pelanggan/parse", {
+      method: "POST",
+      body: formData,
+    })
 
-        const idPelanggan = cleanIdPelanggan(
-          String(
-            row["IDPEL"] ??
-              row["idPelanggan"] ??
-              row["ID Pelanggan"] ??
-              row["ID_Pelanggan"] ??
-              row["ID"] ??
-              ""
-          )
-        )
+    const result = await response.json()
 
-        const nama = String(
-          row["NAMA"] ?? row["Nama"] ?? row["nama"] ?? row["NAMA PELANGGAN"] ?? ""
-        ).trim()
+    if (!response.ok) {
+      throw new Error(result.message || "Gagal parse file")
+    }
 
-        const alamat = String(
-          row["ALAMAT"] ??
-            row["Alamat"] ??
-            row["alamat"] ??
-            row["LOKASI"] ??
-            row["Lokasi"] ??
-            row["ADDRESS"] ??
-            ""
-        ).trim()
+    const parsed = result.data as ParsedRow[]
 
-        const tarif = String(
-          row["TARIF"] ?? row["Tarif"] ?? row["tarif"] ?? row["TRF"] ?? "R1"
-        ).trim()
+    setParsedData(parsed)
 
-        const dayaRaw = row["DAYA"] ?? row["Daya"] ?? row["daya"] ?? 900
-        const daya = Number(dayaRaw) || 900
+    const valid = parsed.filter((r) => r.status === "valid").length
 
-        let status: "valid" | "invalid" = "valid"
-        let error: string | undefined
+    const invalid = parsed.filter((r) => r.status === "invalid").length
 
-        if (!idPelanggan) {
-          status = "invalid"
-          error = "IDPEL kosong"
-        } else if (!/^\d+$/.test(idPelanggan)) {
-          status = "invalid"
-          error = "IDPEL harus angka"
-        } else if (!nama) {
-          status = "invalid"
-          error = "Nama kosong"
-        } else if (!alamat) {
-          status = "invalid"
-          error = "Alamat kosong"
-        }
-
-        return { row: rowNum, idPelanggan, nama, alamat, tarif, daya, status, error }
+    if (valid === 0) {
+      toast.error("Tidak ada data valid", {
+        description: `${invalid} baris error`,
       })
-
-      setParsedData(parsed)
-
-      const valid = parsed.filter((r) => r.status === "valid").length
-      const invalid = parsed.filter((r) => r.status === "invalid").length
-
-      if (valid === 0) {
-        toast.error("Tidak ada data valid", { description: `${invalid} baris error` })
-      } else {
-        toast.success(`File berhasil di-parse`, {
-          description: `${valid} valid, ${invalid} error`,
+    } else {
+      toast.success("File berhasil di-parse", {
+        description: `${valid} valid, ${invalid} error`,
         })
       }
     } catch (error) {
       console.error(error)
+
       toast.error("Gagal membaca file Excel")
     } finally {
       setIsParsing(false)
@@ -222,28 +175,8 @@ export function ImportPelangganForm() {
   }
 
   function downloadTemplate() {
-    const templateData = [
-      {
-        IDPEL: "5461009543",
-        NAMA: "Contoh Nama Pelanggan",
-        ALAMAT: "Jl. Contoh No. 123",
-        TARIF: "R1",
-        DAYA: 900,
-      },
-      {
-        IDPEL: "5461009544",
-        NAMA: "Contoh Pelanggan Lain",
-        ALAMAT: "Jl. Example No. 456",
-        TARIF: "B2",
-        DAYA: 2200,
-      },
-    ]
+    window.open("/templates/template-pelanggan.xlsx", "_blank")
 
-    const worksheet = XLSX.utils.json_to_sheet(templateData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Template Pelanggan")
-    worksheet["!cols"] = [{ wch: 15 }, { wch: 30 }, { wch: 40 }, { wch: 8 }, { wch: 10 }]
-    XLSX.writeFile(workbook, "template-pelanggan.xlsx")
     toast.success("Template berhasil diunduh")
   }
 

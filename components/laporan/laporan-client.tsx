@@ -414,141 +414,27 @@ export function LaporanClient({ userName }: Props) {
   }
 
   async function handleExportExcel() {
-    if (!data) return
-    setIsExportingExcel(true)
-    try {
-      const XLSX = await import("xlsx")
- 
-      const wb = XLSX.utils.book_new()
- 
-      // ── Sheet 1: Ringkasan KPI ──────────────────────────────────────────────
-      const kpiRows = [
-        ["Laporan Target Operasi — TO Generator PLN ICON+"],
-        [],
-        [
-          "Periode",
-          `${new Date(data.range.from).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          })} — ${new Date(data.range.to).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          })}`,
-        ],
-        [
-          "Dicetak oleh",
-          `${userName} — ${new Date().toLocaleString("id-ID")}`,
-        ],
-        [],
-        ["RINGKASAN KPI", ""],
-        ["Total TO (periode)", data.kpi.totalInRange],
-        ["Pending", data.kpi.pending],
-        ["Diproses", data.kpi.diproses],
-        ["Selesai", data.kpi.selesai],
-        ["Dibatalkan", data.kpi.dibatalkan],
-        ["Success Rate (%)", data.kpi.successRate],
-        ["Total TO (sepanjang waktu)", data.kpi.totalAllTime],
-        ["Total Pelanggan", data.kpi.totalPelanggan],
-        ["Data Pemakaian", data.kpi.totalPemakaian],
-        ["TO Historis", data.kpi.totalToHistoris],
-      ]
-      const wsKpi = XLSX.utils.aoa_to_sheet(kpiRows)
-      wsKpi["!cols"] = [{ wch: 34 }, { wch: 50 }]
-      XLSX.utils.book_append_sheet(wb, wsKpi, "Ringkasan")
- 
-      // ── Sheet 2: Breakdown Tipe Anomali ─────────────────────────────────────
-      const tipeLabel: Record<string, string> = {
-        TURUN_DRASTIS: "Turun Drastis",
-        STAGNAN: "Stagnan",
-        NOL_PEMAKAIAN: "Nol Pemakaian",
-        LONJAKAN: "Lonjakan",
-        POLA_TIDAK_WAJAR: "Pola Tidak Wajar",
-      }
-      const tipeRows: (string | number)[][] = [
-        ["Tipe Anomali", "Jumlah TO"],
-        ...Object.entries(data.breakdown.tipe).map(([k, v]) => [
-          tipeLabel[k] ?? k,
-          v,
-        ]),
-      ]
-      const wsTipe = XLSX.utils.aoa_to_sheet(tipeRows)
-      wsTipe["!cols"] = [{ wch: 24 }, { wch: 14 }]
-      XLSX.utils.book_append_sheet(wb, wsTipe, "Breakdown Tipe")
- 
-      // ── Sheet 3: Tren Harian ─────────────────────────────────────────────────
-      const seriesRows: (string | number)[][] = [
-        ["Tanggal", "TO Dibuat", "TO Selesai"],
-        ...data.series.map((s) => [s.date, s.total, s.selesai]),
-      ]
-      const wsSeries = XLSX.utils.aoa_to_sheet(seriesRows)
-      wsSeries["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }]
-      XLSX.utils.book_append_sheet(wb, wsSeries, "Tren Harian")
- 
-      // ── Sheet 4: Detail TO ────────────────────────────────────────────────────
-      const statusLabel: Record<string, string> = {
-        PENDING: "Pending",
-        DIPROSES: "Diproses",
-        SELESAI: "Selesai",
-        DIBATALKAN: "Dibatalkan",
-      }
-      const detailRows: (string | number)[][] = [
-        [
-          "No",
-          "IDPEL",
-          "Nama Pelanggan",
-          "Tarif",
-          "Daya (VA)",
-          "Lokasi",
-          "Tipe Anomali",
-          "Alasan",
-          "Skor (%)",
-          "Status",
-          "Periode",
-          "Tanggal Dibuat",
-        ],
-        ...data.table.map((t, i) => [
-          i + 1,
-          t.pelanggan.idPelanggan,
-          t.pelanggan.nama || "",
-          t.pelanggan.tarif,
-          t.pelanggan.daya,
-          t.pelanggan.lokasi,
-          tipeLabel[t.tipeAnomali] ?? t.tipeAnomali,
-          t.alasan,
-          Math.round(t.skor * 100),
-          statusLabel[t.status] ?? t.status,
-          t.periode,
-          new Date(t.createdAt).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
-        ]),
-      ]
-      const wsDetail = XLSX.utils.aoa_to_sheet(detailRows)
-      wsDetail["!cols"] = [
-        { wch: 5 },   // No
-        { wch: 16 },  // IDPEL
-        { wch: 30 },  // Nama
-        { wch: 8 },   // Tarif
-        { wch: 10 },  // Daya
-        { wch: 30 },  // Lokasi
-        { wch: 20 },  // Tipe
-        { wch: 60 },  // Alasan
-        { wch: 10 },  // Skor
-        { wch: 12 },  // Status
-        { wch: 12 },  // Periode
-        { wch: 16 },  // Tanggal
-      ]
-      XLSX.utils.book_append_sheet(wb, wsDetail, "Detail TO")
- 
-      const filename = `laporan-TO-${data.range.from.slice(0, 10)}_sd_${data.range.to.slice(0, 10)}.xlsx`
-      XLSX.writeFile(wb, filename)
- 
-      toast.success("Laporan Excel berhasil diunduh", {
-        description: `${data.table.length} TO diekspor ke 4 sheet`,
+  if (!data) return
+  setIsExportingExcel(true)
+  try {
+    const response = await fetch("/api/laporan/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data, userName }),
+    })
+
+    if (!response.ok) throw new Error("Gagal mengekspor")
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `laporan-TO-${data.range.from.slice(0, 10)}_sd_${data.range.to.slice(0, 10)}.xlsx`
+    a.click()
+    window.URL.revokeObjectURL(url)
+
+    toast.success("Laporan Excel berhasil diunduh", {
+      description: `${data.table.length} TO diekspor ke 4 sheet`,
       })
     } catch (err) {
       console.error(err)
