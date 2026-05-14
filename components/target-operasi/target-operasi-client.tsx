@@ -404,11 +404,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               <Sparkles className="h-5 w-5 text-blue-600" />
               Jalankan Deteksi Target Operasi?
             </AlertDialogTitle>
-            <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-blue-600" />
-              Jalankan Deteksi Target Operasi?
-            </AlertDialogTitle>
             <AlertDialogDescription>
               Sistem akan menganalisis seluruh data pemakaian pelanggan dan mendeteksi 5 pola anomali secara otomatis.
             </AlertDialogDescription>
@@ -425,7 +420,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                 halaman lain. Progress ditampilkan di banner bawah.
               </p>
             </div>
-          </AlertDialogHeader>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isGenerating}>Batal</AlertDialogCancel>

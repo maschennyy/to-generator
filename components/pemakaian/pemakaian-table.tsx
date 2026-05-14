@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { toast } from "sonner"
 import {
   Search,
@@ -49,8 +49,9 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
+  const [isDownloading, setIsDownloading] = useState(false)
 
-  async function fetchData() {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
       const params = new URLSearchParams({
@@ -73,12 +74,11 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [search, page])
 
   useEffect(() => {
     fetchData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, page]) // ← useEffect ditutup dengan benar di sini
+  }, [fetchData])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
@@ -93,29 +93,45 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
   }
 
   async function handleDownload() {
-  try {
-    toast.info("Menyiapkan data...")
+    if (isDownloading) return
+    setIsDownloading(true)
 
-    const params = new URLSearchParams({ search })
-    const response = await fetch(`/api/pemakaian/export?${params}`)
+    const toastId = toast.loading(
+      `Menyiapkan export${total > 5000 ? ` (${total.toLocaleString("id-ID")} baris, mungkin perlu beberapa saat)` : ""}...`
+    )
 
-    if (!response.ok) throw new Error("Gagal mengunduh")
+    try {
+      const params = new URLSearchParams({ search })
+      const response = await fetch(`/api/pemakaian/export?${params}`)
 
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    const today = new Date().toISOString().slice(0, 10)
-    a.href = url
-    a.download = `data-pemakaian-${today}.xlsx`
-    a.click()
-    window.URL.revokeObjectURL(url)
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || "Gagal mengunduh")
+      }
 
-    toast.success("Data berhasil diunduh")
-  } catch (error) {
-    console.error(error)
-    toast.error("Gagal mengunduh data")
+      // Stream blob tanpa memblokir UI
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      const today = new Date().toISOString().slice(0, 10)
+      a.href = url
+      a.download = `data-pemakaian-${today}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      toast.success("Data berhasil diunduh", { id: toastId })
+    } catch (error) {
+      console.error(error)
+      toast.error(
+        error instanceof Error ? error.message : "Gagal mengunduh data",
+        { id: toastId }
+      )
+    } finally {
+      setIsDownloading(false)
+    }
   }
-}
 
   function getCellClass(kwh: number | null): string {
     if (kwh === null) return "text-muted-foreground italic text-center"
@@ -148,22 +164,37 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
         )}
       </form>
 
-      {/* Info */}
+      {/* Info + Download */}
       {!isLoading && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Menampilkan {data.length} pelanggan dari total {total}
+            Menampilkan {data.length} dari {total.toLocaleString("id-ID")} pelanggan
+            {search && ` (hasil pencarian)`}
           </p>
           <Button
             type="button"
             size="sm"
             variant="outline"
             onClick={handleDownload}
-            disabled={isLoading}
-            className="text-green-600 border-green-200 hover:bg-green-50"
+            disabled={isDownloading || total === 0}
+            className="text-green-600 border-green-200 hover:bg-green-50 dark:border-green-800 dark:hover:bg-green-950/30"
           >
-            <Download className="h-4 w-4 mr-1" />
-            Download Excel
+            {isDownloading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Menyiapkan...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-1" />
+                Download Excel
+                {total > 0 && (
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({total.toLocaleString("id-ID")})
+                  </span>
+                )}
+              </>
+            )}
           </Button>
         </div>
       )}
@@ -207,8 +238,12 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
                   <th className="px-3 py-3 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 min-w-[200px]">
                     Nama
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 min-w-[90px]">
+                  <th className="px-3 py-3 text-center text-xs font-semibold text-slate-700 dark:text-slate-300 min-w-[70px]">
                     Tarif
+                  </th>
+                  {/* ← Kolom Daya ditambahkan */}
+                  <th className="px-3 py-3 text-right text-xs font-semibold text-slate-700 dark:text-slate-300 min-w-[90px]">
+                    Daya (VA)
                   </th>
                   {months.map((m) => (
                     <th
@@ -241,12 +276,16 @@ export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
                       </Link>
                     </td>
                     <td className="px-3 py-3 text-sm font-medium">
-                      {item.nama}
+                      {item.nama || <span className="text-muted-foreground italic">—</span>}
                     </td>
                     <td className="px-3 py-3 text-center">
                       <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
                         {item.tarif}
                       </span>
+                    </td>
+                    {/* ← Nilai Daya */}
+                    <td className="px-3 py-3 text-sm text-right font-mono text-muted-foreground">
+                      {item.daya.toLocaleString("id-ID")}
                     </td>
                     {item.pemakaian.map((p) => (
                       <td
