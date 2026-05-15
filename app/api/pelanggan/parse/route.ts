@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import ExcelJS from "exceljs"
-
+import * as XLSX from "xlsx"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
+
 interface ParsedRow {
   row: number
   idPelanggan: string
@@ -16,89 +16,46 @@ interface ParsedRow {
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
-
     const file = formData.get("file") as File
 
     if (!file) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "File tidak ditemukan",
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, message: "File tidak ditemukan" }, { status: 400 })
     }
 
     const arrayBuffer = await file.arrayBuffer()
-
-    const buffer = Uint8Array.from(new Uint8Array(arrayBuffer))
-
-    const workbook = new ExcelJS.Workbook()
-
-    await workbook.xlsx.load(buffer as any)
-
-    const worksheet = workbook.worksheets[0]
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown>(worksheet, { header: 1, defval: "" }) as unknown[][]
 
     const parsedData: ParsedRow[] = []
 
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return
-
-      const idPelanggan = cleanIdPelanggan(
-        String(row.getCell(1).value ?? "")
-      )
-
-      const nama = String(row.getCell(2).value ?? "").trim()
-
-      const alamat = String(row.getCell(3).value ?? "").trim()
-
-      const tarif = String(row.getCell(4).value ?? "R1").trim()
-
-      const daya = Number(row.getCell(5).value ?? 900)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      const idPelanggan = cleanIdPelanggan(String(row[0] ?? ""))
+      const nama = String(row[1] ?? "").trim()
+      const alamat = String(row[2] ?? "").trim()
+      const tarif = String(row[3] ?? "R1").trim()
+      const daya = Number(row[4] ?? 900) || 900
 
       let status: "valid" | "invalid" = "valid"
-
       let error: string | undefined
 
       if (!idPelanggan) {
-        status = "invalid"
-        error = "IDPEL kosong"
+        status = "invalid"; error = "IDPEL kosong"
       } else if (!/^\d+$/.test(idPelanggan)) {
-        status = "invalid"
-        error = "IDPEL harus angka"
+        status = "invalid"; error = "IDPEL harus angka"
       } else if (!nama) {
-        status = "invalid"
-        error = "Nama kosong"
+        status = "invalid"; error = "Nama kosong"
       } else if (!alamat) {
-        status = "invalid"
-        error = "Alamat kosong"
+        status = "invalid"; error = "Alamat kosong"
       }
 
-      parsedData.push({
-        row: rowNumber,
-        idPelanggan,
-        nama,
-        alamat,
-        tarif,
-        daya,
-        status,
-        error,
-      })
-    })
+      parsedData.push({ row: i + 1, idPelanggan, nama, alamat, tarif, daya, status, error })
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: parsedData,
-    })
+    return NextResponse.json({ success: true, data: parsedData })
   } catch (error) {
-    console.error(error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Gagal membaca file Excel",
-      },
-      { status: 500 }
-    )
+    console.error("pelanggan/parse error:", error)
+    return NextResponse.json({ success: false, message: "Gagal membaca file Excel" }, { status: 500 })
   }
 }

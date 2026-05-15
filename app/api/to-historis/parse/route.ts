@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import ExcelJS from "exceljs"
-
+import * as XLSX from "xlsx"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
 interface ParsedRow {
@@ -14,78 +13,39 @@ interface ParsedRow {
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
-
     const file = formData.get("file") as File
 
     if (!file) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "File tidak ditemukan",
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, message: "File tidak ditemukan" }, { status: 400 })
     }
 
     const arrayBuffer = await file.arrayBuffer()
-
-    const buffer = Buffer.from(arrayBuffer)
-    
-    const workbook = new ExcelJS.Workbook()
-
-    // @ts-expect-error: Mengabaikan mismatch tipe Buffer Node.js terbaru dengan ExcelJS
-    await workbook.xlsx.load(buffer);
-
-    const worksheet = workbook.worksheets[0]
+    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows = XLSX.utils.sheet_to_json<unknown>(worksheet, { header: 1, defval: "" }) as unknown[][]
 
     const parsedData: ParsedRow[] = []
 
-    worksheet.eachRow((row, rowNumber) => {
-      // skip header
-      if (rowNumber === 1) return
-
-      const idPelanggan = cleanIdPelanggan(
-        String(row.getCell(1).value ?? "")
-      )
-
-      const nama = String(
-        row.getCell(2).value ?? ""
-      ).trim()
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i]
+      const idPelanggan = cleanIdPelanggan(String(row[0] ?? ""))
+      const nama = String(row[1] ?? "").trim()
 
       let status: "valid" | "invalid" = "valid"
-
       let error: string | undefined
 
       if (!idPelanggan) {
-        status = "invalid"
-        error = "IDPEL kosong"
+        status = "invalid"; error = "IDPEL kosong"
       } else if (!/^\d+$/.test(idPelanggan)) {
-        status = "invalid"
-        error = "IDPEL harus angka"
+        status = "invalid"; error = "IDPEL harus angka"
       }
 
-      parsedData.push({
-        row: rowNumber,
-        idPelanggan,
-        nama,
-        status,
-        error,
-      })
-    })
+      parsedData.push({ row: i + 1, idPelanggan, nama, status, error })
+    }
 
-    return NextResponse.json({
-      success: true,
-      data: parsedData,
-    })
+    return NextResponse.json({ success: true, data: parsedData })
   } catch (error) {
-    console.error(error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: "Gagal membaca file Excel",
-      },
-      { status: 500 }
-    )
+    console.error("to-historis/parse error:", error)
+    return NextResponse.json({ success: false, message: "Gagal membaca file Excel" }, { status: 500 })
   }
 }

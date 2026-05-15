@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server"
-import ExcelJS from "exceljs"
-import { auth } from "@/auth"
+import { NextRequest, NextResponse } from "next/server";
+import * as XLSX from "xlsx";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
 const TIPE_LABEL: Record<string, string> = {
   TURUN_DRASTIS: "Turun Drastis",
@@ -8,133 +9,163 @@ const TIPE_LABEL: Record<string, string> = {
   NOL_PEMAKAIAN: "Nol Pemakaian",
   LONJAKAN: "Lonjakan",
   POLA_TIDAK_WAJAR: "Pola Tidak Wajar",
-}
+};
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
   DIPROSES: "Diproses",
   SELESAI: "Selesai",
   DIBATALKAN: "Dibatalkan",
-}
+};
 
-export async function POST(request: NextRequest) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+export async function GET(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const body = await request.json()
-  const { allData, search, filterTipe, filterStatus } = body
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search") ?? "";
+    const filterStatus = searchParams.get("status") ?? "";
+    const filterTipe = searchParams.get("tipe") ?? "";
+    const filterPeriode = searchParams.get("periode") ?? "";
 
-  if (!allData || allData.length === 0) {
-    return NextResponse.json({ error: "Tidak ada data" }, { status: 400 })
-  }
+    // Gunakan any agar tidak dicek ketat oleh TypeScript
+    const where: any = {};
 
-  const workbook = new ExcelJS.Workbook()
-  const now = new Date()
+    if (filterStatus) where.status = filterStatus;
+    if (filterTipe) where.tipeAnomali = filterTipe;
+    if (filterPeriode) where.periode = filterPeriode;
 
-  // ── Sheet 1: Daftar TO ──────────────────────────────────────────────────
-  const wsTO = workbook.addWorksheet("Daftar TO")
-  wsTO.columns = [
-    { header: "No", key: "no", width: 6 },
-    { header: "IDPEL", key: "idpel", width: 18 },
-    { header: "Nama Pelanggan", key: "nama", width: 30 },
-    { header: "Tarif", key: "tarif", width: 10 },
-    { header: "Daya (VA)", key: "daya", width: 12 },
-    { header: "Lokasi", key: "lokasi", width: 30 },
-    { header: "Tipe Anomali", key: "tipe", width: 22 },
-    { header: "Alasan", key: "alasan", width: 60 },
-    { header: "Skor (%)", key: "skor", width: 12 },
-    { header: "Status", key: "status", width: 14 },
-    { header: "Periode", key: "periode", width: 14 },
-    { header: "TO Historis", key: "historis", width: 14 },
-    { header: "Tanggal Generate", key: "tanggal", width: 18 },
-  ]
-  wsTO.getRow(1).font = { bold: true }
-  wsTO.getRow(1).fill = {
-    type: "pattern", pattern: "solid", fgColor: { argb: "FFE2EFDA" },
-  }
+    if (search) {
+      where.pelanggan = {
+        OR: [
+          { idPelanggan: { contains: search, mode: "insensitive" } },
+          { nama: { contains: search, mode: "insensitive" } },
+          { lokasi: { contains: search, mode: "insensitive" } },
+        ],
+      };
+    }
 
-  allData.forEach((item: {
-    pelanggan: { idPelanggan: string; nama: string; tarif: string; daya: number; lokasi: string; isToHistory: boolean }
-    tipeAnomali: string; alasan: string; skor: number; status: string
-    periode: string; createdAt: string
-  }, i: number) => {
-    wsTO.addRow({
-      no: i + 1,
-      idpel: item.pelanggan.idPelanggan,
-      nama: item.pelanggan.nama || "",
-      tarif: item.pelanggan.tarif,
-      daya: item.pelanggan.daya,
-      lokasi: item.pelanggan.lokasi,
-      tipe: TIPE_LABEL[item.tipeAnomali] ?? item.tipeAnomali,
-      alasan: item.alasan,
-      skor: Math.round(item.skor * 100),
-      status: STATUS_LABEL[item.status] ?? item.status,
-      periode: item.periode,
-      historis: item.pelanggan.isToHistory ? "Ya" : "Tidak",
-      tanggal: new Date(item.createdAt).toLocaleDateString("id-ID", {
+    // Biarkan TypeScript infer tipe allData (termasuk pelanggan dari include)
+    const allData = await prisma.targetOperasi.findMany({
+      where,
+      orderBy: [{ skor: "desc" }, { createdAt: "desc" }],
+      include: {
+        pelanggan: {
+          select: {
+            idPelanggan: true,
+            nama: true,
+            tarif: true,
+            daya: true,
+            lokasi: true,
+            isToHistory: true,
+          },
+        },
+      },
+    });
+
+    if (allData.length === 0) {
+      return NextResponse.json(
+        { error: "Tidak ada data untuk diekspor" },
+        { status: 404 }
+      );
+    }
+
+    const now = new Date();
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Daftar TO ──────────────────────────────────────────────────
+    const toHeader = [
+      "No", "IDPEL", "Nama Pelanggan", "Tarif", "Daya (VA)", "Lokasi",
+      "Tipe Anomali", "Alasan", "Skor (%)", "Status", "Periode",
+      "TO Historis", "Tanggal Generate",
+    ];
+    const toRows = allData.map((item, i) => [
+      i + 1,
+      item.pelanggan.idPelanggan,          // ✅ sekarang dikenal
+      item.pelanggan.nama || "",
+      item.pelanggan.tarif,
+      item.pelanggan.daya,
+      item.pelanggan.lokasi,
+      TIPE_LABEL[item.tipeAnomali] ?? item.tipeAnomali,
+      item.alasan,
+      Math.round(item.skor * 100),
+      STATUS_LABEL[item.status] ?? item.status,
+      item.periode,
+      item.pelanggan.isToHistory ? "Ya" : "Tidak",
+      item.createdAt.toLocaleDateString("id-ID", {
         day: "2-digit", month: "short", year: "numeric",
       }),
-    })
-  })
+    ]);
 
-  // ── Sheet 2: Rekap per Tipe ──────────────────────────────────────────────
-  const rekapTipe = new Map<string, number>()
-  for (const item of allData) {
-    rekapTipe.set(item.tipeAnomali, (rekapTipe.get(item.tipeAnomali) ?? 0) + 1)
+    const wsTO = XLSX.utils.aoa_to_sheet([toHeader, ...toRows]);
+    wsTO["!cols"] = [
+      { wch: 5 }, { wch: 16 }, { wch: 28 }, { wch: 8 }, { wch: 10 },
+      { wch: 28 }, { wch: 20 }, { wch: 60 }, { wch: 10 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsTO, "Daftar TO");
+
+    // ── Sheet 2: Rekap per Tipe ─────────────────────────────────────────────
+    const rekapTipe = new Map<string, number>();
+    for (const item of allData) {
+      rekapTipe.set(item.tipeAnomali, (rekapTipe.get(item.tipeAnomali) ?? 0) + 1);
+    }
+
+    const tipeRows: (string | number)[][] = [
+      ["Tipe Anomali", "Jumlah TO", "Persentase (%)"],
+      ...Array.from(rekapTipe.entries()).map(([tipe, count]) => [
+        TIPE_LABEL[tipe] ?? tipe,
+        count,
+        Math.round((count / allData.length) * 100),
+      ]),
+      ["TOTAL", allData.length, 100],
+    ];
+    const wsTipe = XLSX.utils.aoa_to_sheet(tipeRows);
+    wsTipe["!cols"] = [{ wch: 26 }, { wch: 14 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, wsTipe, "Rekap Tipe");
+
+    // ── Sheet 3: Rekap per Status ───────────────────────────────────────────
+    const rekapStatus = new Map<string, number>();
+    for (const item of allData) {
+      rekapStatus.set(item.status, (rekapStatus.get(item.status) ?? 0) + 1);
+    }
+
+    const statusRows: (string | number)[][] = [
+      ["Status", "Jumlah TO", "Persentase (%)"],
+      ...Array.from(rekapStatus.entries()).map(([status, count]) => [
+        STATUS_LABEL[status] ?? status,
+        count,
+        Math.round((count / allData.length) * 100),
+      ]),
+      ["TOTAL", allData.length, 100],
+    ];
+    const wsStatus = XLSX.utils.aoa_to_sheet(statusRows);
+    wsStatus["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, wsStatus, "Rekap Status");
+
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    const parts = ["TO"];
+    if (filterTipe) parts.push(TIPE_LABEL[filterTipe]?.replace(/\s/g, "-") ?? filterTipe);
+    if (filterStatus) parts.push(STATUS_LABEL[filterStatus] ?? filterStatus);
+    if (search) parts.push(`cari-${search.slice(0, 10)}`);
+    const filename = `${parts.join("_")}_${now.toISOString().slice(0, 10)}.xlsx`;
+
+    return new NextResponse(buffer, {
+      headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Length": buffer.byteLength.toString(),
+      },
+    });
+  } catch (error) {
+    console.error("GET /api/target-operasi/export error:", error);
+    return NextResponse.json(
+      { error: "Terjadi kesalahan saat mengekspor data" },
+      { status: 500 }
+    );
   }
-
-  const wsTipe = workbook.addWorksheet("Rekap Tipe")
-  wsTipe.columns = [
-    { header: "Tipe Anomali", key: "tipe", width: 26 },
-    { header: "Jumlah TO", key: "jumlah", width: 14 },
-    { header: "Persentase (%)", key: "persen", width: 18 },
-  ]
-  wsTipe.getRow(1).font = { bold: true }
-  rekapTipe.forEach((count, tipe) => {
-    wsTipe.addRow({
-      tipe: TIPE_LABEL[tipe] ?? tipe,
-      jumlah: count,
-      persen: Math.round((count / allData.length) * 100),
-    })
-  })
-  wsTipe.addRow({ tipe: "TOTAL", jumlah: allData.length, persen: 100 })
-
-  // ── Sheet 3: Rekap per Status ────────────────────────────────────────────
-  const rekapStatus = new Map<string, number>()
-  for (const item of allData) {
-    rekapStatus.set(item.status, (rekapStatus.get(item.status) ?? 0) + 1)
-  }
-
-  const wsStatus = workbook.addWorksheet("Rekap Status")
-  wsStatus.columns = [
-    { header: "Status", key: "status", width: 18 },
-    { header: "Jumlah TO", key: "jumlah", width: 14 },
-    { header: "Persentase (%)", key: "persen", width: 18 },
-  ]
-  wsStatus.getRow(1).font = { bold: true }
-  rekapStatus.forEach((count, status) => {
-    wsStatus.addRow({
-      status: STATUS_LABEL[status] ?? status,
-      jumlah: count,
-      persen: Math.round((count / allData.length) * 100),
-    })
-  })
-  wsStatus.addRow({ status: "TOTAL", jumlah: allData.length, persen: 100 })
-
-  const buffer = await workbook.xlsx.writeBuffer()
-
-  const parts = ["TO"]
-  if (filterTipe) parts.push(TIPE_LABEL[filterTipe]?.replace(/\s/g, "-") ?? filterTipe)
-  if (filterStatus) parts.push(STATUS_LABEL[filterStatus] ?? filterStatus)
-  if (search) parts.push(`cari-${search.slice(0, 10)}`)
-  const filename = `${parts.join("_")}_${now.toISOString().slice(0, 10)}.xlsx`
-
-  return new NextResponse(buffer, {
-    headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  })
 }

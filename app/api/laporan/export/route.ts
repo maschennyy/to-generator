@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import ExcelJS from "exceljs"
+import * as XLSX from "xlsx"
 import { auth } from "@/auth"
 
 const TIPE_LABEL: Record<string, string> = {
@@ -17,6 +17,33 @@ const STATUS_LABEL: Record<string, string> = {
   DIBATALKAN: "Dibatalkan",
 }
 
+type LaporanData = {
+  range: { from: string; to: string }
+  kpi: {
+    totalInRange: number
+    pending: number
+    diproses: number
+    selesai: number
+    dibatalkan: number
+    successRate: number
+    totalAllTime: number
+    totalPelanggan: number
+    totalPemakaian: number
+    totalToHistoris: number
+  }
+  breakdown: { tipe: Record<string, number> }
+  series: Array<{ date: string; total: number; selesai: number }>
+  table: Array<{
+    pelanggan: { idPelanggan: string; nama: string; tarif: string; daya: number; lokasi: string }
+    tipeAnomali: string
+    alasan: string
+    skor: number
+    status: string
+    periode: string
+    createdAt: string
+  }>
+}
+
 export async function POST(request: NextRequest) {
   const session = await auth()
   if (!session) {
@@ -24,113 +51,99 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { data, userName } = body
+  const { data, userName } = body as { data: LaporanData; userName: string }
 
-  const workbook = new ExcelJS.Workbook()
+  if (!data) {
+    return NextResponse.json({ error: "Data tidak valid" }, { status: 400 })
+  }
 
-  // ── Sheet 1: Ringkasan KPI ──────────────────────────────────────────────
-  const wsKpi = workbook.addWorksheet("Ringkasan")
-  wsKpi.columns = [
-    { header: "", key: "label", width: 36 },
-    { header: "", key: "value", width: 52 },
-  ]
+  const wb = XLSX.utils.book_new()
 
+  // ── Sheet 1: Ringkasan KPI ────────────────────────────────────────────────
   const periodeStr = `${new Date(data.range.from).toLocaleDateString("id-ID", {
     day: "2-digit", month: "long", year: "numeric",
   })} — ${new Date(data.range.to).toLocaleDateString("id-ID", {
     day: "2-digit", month: "long", year: "numeric",
   })}`
 
-  wsKpi.addRow(["Laporan Target Operasi — TO Generator PLN ICON+"])
-  wsKpi.addRow([])
-  wsKpi.addRow(["Periode", periodeStr])
-  wsKpi.addRow(["Dicetak oleh", `${userName} — ${new Date().toLocaleString("id-ID")}`])
-  wsKpi.addRow([])
-  wsKpi.addRow(["RINGKASAN KPI", ""])
-  wsKpi.addRow(["Total TO (periode)", data.kpi.totalInRange])
-  wsKpi.addRow(["Pending", data.kpi.pending])
-  wsKpi.addRow(["Diproses", data.kpi.diproses])
-  wsKpi.addRow(["Selesai", data.kpi.selesai])
-  wsKpi.addRow(["Dibatalkan", data.kpi.dibatalkan])
-  wsKpi.addRow(["Success Rate (%)", data.kpi.successRate])
-  wsKpi.addRow(["Total TO (sepanjang waktu)", data.kpi.totalAllTime])
-  wsKpi.addRow(["Total Pelanggan", data.kpi.totalPelanggan])
-  wsKpi.addRow(["Data Pemakaian", data.kpi.totalPemakaian])
-  wsKpi.addRow(["TO Historis", data.kpi.totalToHistoris])
-
-  // ── Sheet 2: Breakdown Tipe Anomali ─────────────────────────────────────
-  const wsTipe = workbook.addWorksheet("Breakdown Tipe")
-  wsTipe.columns = [
-    { header: "Tipe Anomali", key: "tipe", width: 26 },
-    { header: "Jumlah TO", key: "jumlah", width: 14 },
+  const kpiRows: (string | number)[][] = [
+    ["Laporan Target Operasi — TO Generator PLN ICON+"],
+    [],
+    ["Periode", periodeStr],
+    ["Dicetak oleh", `${userName} — ${new Date().toLocaleString("id-ID")}`],
+    [],
+    ["RINGKASAN KPI", ""],
+    ["Total TO (periode)", data.kpi.totalInRange],
+    ["Pending", data.kpi.pending],
+    ["Diproses", data.kpi.diproses],
+    ["Selesai", data.kpi.selesai],
+    ["Dibatalkan", data.kpi.dibatalkan],
+    ["Success Rate (%)", data.kpi.successRate],
+    ["Total TO (sepanjang waktu)", data.kpi.totalAllTime],
+    ["Total Pelanggan", data.kpi.totalPelanggan],
+    ["Data Pemakaian", data.kpi.totalPemakaian],
+    ["TO Historis", data.kpi.totalToHistoris],
   ]
-  wsTipe.getRow(1).font = { bold: true }
-  Object.entries(data.breakdown.tipe).forEach(([k, v]) => {
-    wsTipe.addRow({ tipe: TIPE_LABEL[k] ?? k, jumlah: v })
-  })
+  const wsKpi = XLSX.utils.aoa_to_sheet(kpiRows)
+  wsKpi["!cols"] = [{ wch: 34 }, { wch: 52 }]
+  XLSX.utils.book_append_sheet(wb, wsKpi, "Ringkasan")
 
-  // ── Sheet 3: Tren Harian ─────────────────────────────────────────────────
-  const wsSeries = workbook.addWorksheet("Tren Harian")
-  wsSeries.columns = [
-    { header: "Tanggal", key: "date", width: 14 },
-    { header: "TO Dibuat", key: "total", width: 14 },
-    { header: "TO Selesai", key: "selesai", width: 14 },
+  // ── Sheet 2: Breakdown Tipe ───────────────────────────────────────────────
+  const tipeRows: (string | number)[][] = [
+    ["Tipe Anomali", "Jumlah TO"],
+    ...Object.entries(data.breakdown.tipe).map(([k, v]) => [TIPE_LABEL[k] ?? k, v]),
   ]
-  wsSeries.getRow(1).font = { bold: true }
-  data.series.forEach((s: { date: string; total: number; selesai: number }) => {
-    wsSeries.addRow(s)
-  })
+  const wsTipe = XLSX.utils.aoa_to_sheet(tipeRows)
+  wsTipe["!cols"] = [{ wch: 26 }, { wch: 14 }]
+  XLSX.utils.book_append_sheet(wb, wsTipe, "Breakdown Tipe")
+
+  // ── Sheet 3: Tren Harian ──────────────────────────────────────────────────
+  const seriesRows: (string | number)[][] = [
+    ["Tanggal", "TO Dibuat", "TO Selesai"],
+    ...data.series.map((s) => [s.date, s.total, s.selesai]),
+  ]
+  const wsSeries = XLSX.utils.aoa_to_sheet(seriesRows)
+  wsSeries["!cols"] = [{ wch: 14 }, { wch: 14 }, { wch: 14 }]
+  XLSX.utils.book_append_sheet(wb, wsSeries, "Tren Harian")
 
   // ── Sheet 4: Detail TO ────────────────────────────────────────────────────
-  const wsDetail = workbook.addWorksheet("Detail TO")
-  wsDetail.columns = [
-    { header: "No", key: "no", width: 6 },
-    { header: "IDPEL", key: "idpel", width: 18 },
-    { header: "Nama Pelanggan", key: "nama", width: 30 },
-    { header: "Tarif", key: "tarif", width: 10 },
-    { header: "Daya (VA)", key: "daya", width: 12 },
-    { header: "Lokasi", key: "lokasi", width: 30 },
-    { header: "Tipe Anomali", key: "tipe", width: 22 },
-    { header: "Alasan", key: "alasan", width: 60 },
-    { header: "Skor (%)", key: "skor", width: 12 },
-    { header: "Status", key: "status", width: 14 },
-    { header: "Periode", key: "periode", width: 14 },
-    { header: "Tanggal Dibuat", key: "tanggal", width: 18 },
+  const detailHeader = [
+    "No", "IDPEL", "Nama Pelanggan", "Tarif", "Daya (VA)", "Lokasi",
+    "Tipe Anomali", "Alasan", "Skor (%)", "Status", "Periode", "Tanggal Dibuat",
   ]
-  wsDetail.getRow(1).font = { bold: true }
-  wsDetail.getRow(1).fill = {
-    type: "pattern", pattern: "solid", fgColor: { argb: "FFE2EFDA" },
-  }
-  data.table.forEach((t: {
-    pelanggan: { idPelanggan: string; nama: string; tarif: string; daya: number; lokasi: string }
-    tipeAnomali: string; alasan: string; skor: number; status: string
-    periode: string; createdAt: string
-  }, i: number) => {
-    wsDetail.addRow({
-      no: i + 1,
-      idpel: t.pelanggan.idPelanggan,
-      nama: t.pelanggan.nama || "",
-      tarif: t.pelanggan.tarif,
-      daya: t.pelanggan.daya,
-      lokasi: t.pelanggan.lokasi,
-      tipe: TIPE_LABEL[t.tipeAnomali] ?? t.tipeAnomali,
-      alasan: t.alasan,
-      skor: Math.round(t.skor * 100),
-      status: STATUS_LABEL[t.status] ?? t.status,
-      periode: t.periode,
-      tanggal: new Date(t.createdAt).toLocaleDateString("id-ID", {
-        day: "2-digit", month: "short", year: "numeric",
-      }),
-    })
-  })
+  const detailRows = data.table.map((t, i) => [
+    i + 1,
+    t.pelanggan.idPelanggan,
+    t.pelanggan.nama || "",
+    t.pelanggan.tarif,
+    t.pelanggan.daya,
+    t.pelanggan.lokasi,
+    TIPE_LABEL[t.tipeAnomali] ?? t.tipeAnomali,
+    t.alasan,
+    Math.round(t.skor * 100),
+    STATUS_LABEL[t.status] ?? t.status,
+    t.periode,
+    new Date(t.createdAt).toLocaleDateString("id-ID", {
+      day: "2-digit", month: "short", year: "numeric",
+    }),
+  ])
 
-  const buffer = await workbook.xlsx.writeBuffer()
+  const wsDetail = XLSX.utils.aoa_to_sheet([detailHeader, ...detailRows])
+  wsDetail["!cols"] = [
+    { wch: 5 }, { wch: 16 }, { wch: 28 }, { wch: 8 }, { wch: 10 },
+    { wch: 28 }, { wch: 20 }, { wch: 60 }, { wch: 10 },
+    { wch: 12 }, { wch: 12 }, { wch: 16 },
+  ]
+  XLSX.utils.book_append_sheet(wb, wsDetail, "Detail TO")
+
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" })
   const filename = `laporan-TO-${data.range.from.slice(0, 10)}_sd_${data.range.to.slice(0, 10)}.xlsx`
 
   return new NextResponse(buffer, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": buffer.byteLength.toString(),
     },
   })
 }

@@ -155,40 +155,37 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   }
 
   async function handleExportExcel() {
-  setIsExporting(true)
-  try {
-    const params = new URLSearchParams({ search, limit: "9999", page: "1" })
-    if (filterStatus) params.append("status", filterStatus)
-    if (filterTipe) params.append("tipe", filterTipe)
-
-    const res = await fetch(`/api/target-operasi?${params}`)
-    const result = await res.json()
-    if (!res.ok) throw new Error(result.error || "Gagal mengambil data")
-
-    const allData: TargetOperasiItem[] = result.data
-    if (allData.length === 0) {
-      toast.error("Tidak ada data untuk diekspor")
-      return
-    }
-
-    const response = await fetch("/api/target-operasi/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ allData, search, filterTipe, filterStatus }),
-    })
-
-    if (!response.ok) throw new Error("Gagal mengekspor")
-
-    const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `TO_${new Date().toISOString().slice(0, 10)}.xlsx`
-    a.click()
-    window.URL.revokeObjectURL(url)
-
-    toast.success("Export Excel berhasil", {
-      description: `${allData.length.toLocaleString("id-ID")} TO diekspor ke 3 sheet`,
+    setIsExporting(true)
+    try {
+      // Kirim filter sebagai query params — server ambil data langsung dari DB
+      const params = new URLSearchParams()
+      if (search) params.set("search", search)
+      if (filterStatus) params.set("status", filterStatus)
+      if (filterTipe) params.set("tipe", filterTipe)
+ 
+      const response = await fetch(`/api/target-operasi/export?${params}`)
+ 
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || "Gagal mengekspor")
+      }
+ 
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      document.body.appendChild(a)
+      a.href = url
+      a.download = `TO_${new Date().toISOString().slice(0, 10)}.xlsx`
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+ 
+      // Ambil jumlah baris dari Content-Length tidak praktis,
+      // tampilkan pesan sukses tanpa angka
+      toast.success("Export Excel berhasil", {
+        description: hasActiveFilters
+          ? "Data terfilter berhasil diekspor ke 3 sheet"
+          : "Semua data TO berhasil diekspor ke 3 sheet",
       })
     } catch (err) {
       console.error(err)
