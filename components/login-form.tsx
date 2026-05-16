@@ -98,7 +98,7 @@ export function LoginForm() {
             Sedang masuk...
           </>
         ) : (
-          "Masuk ke Sistem"
+          "Masuk"
         )}
       </button>
     </form>

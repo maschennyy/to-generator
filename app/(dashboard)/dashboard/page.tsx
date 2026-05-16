@@ -2,6 +2,7 @@ import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { DashboardStats } from "@/components/dashboard/dashboard-stats"
 import { DashboardWarning } from "@/components/dashboard/dashboard-warning"
+import { DashboardCharts } from "@/components/dashboard/dashboard-charts"
 
 export default async function DashboardPage() {
   const session = await auth()
@@ -24,6 +25,9 @@ export default async function DashboardPage() {
 
       {/* Stats Cards */}
       <DashboardStats />
+
+      {/* Charts */}
+      <DashboardCharts />
     </div>
   )
 }
