@@ -1,49 +1,114 @@
 "use client"
 
-import { LogOut, User } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { LogOut, User, UserCircle, ChevronDown } from "lucide-react"
 import { signOut } from "next-auth/react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { NotificationBell } from "@/components/notification-bell"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface TopbarProps {
   userName: string
   userRole: string
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Administrator",
+  SPV: "Supervisor",
+  USER: "Pengguna",
+}
+
 export function Topbar({ userName, userRole }: TopbarProps) {
   const isAdmin = userRole === "ADMIN"
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Tutup menu saat klik di luar
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  // Inisial nama untuk avatar
+  const initials = userName
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
 
   return (
     <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 sticky top-0 z-20 shadow-sm">
       <div className="flex items-center justify-between">
-        {/* User info */}
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
-            <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <p className="text-sm font-medium">{userName}</p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {userRole.toLowerCase()}
-            </p>
-          </div>
-        </div>
+        {/* Kiri — bisa diisi breadcrumb di masa depan */}
+        <div />
 
-        {/* Right side actions */}
+        {/* Kanan */}
         <div className="flex items-center gap-2">
-          {/* Notification bell */}
           <NotificationBell isAdmin={isAdmin} />
+          <ThemeToggle />
 
-          {/* Logout */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
+          {/* User menu */}
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              {/* Avatar dengan inisial */}
+              <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                {initials || <User className="h-4 w-4" />}
+              </div>
+              <div className="text-left hidden sm:block">
+                <p className="text-sm font-medium leading-tight">{userName}</p>
+                <p className="text-xs text-muted-foreground leading-tight">
+                  {ROLE_LABEL[userRole] ?? userRole}
+                </p>
+              </div>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${menuOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {/* Dropdown */}
+            {menuOpen && (
+              <div className="absolute right-0 top-12 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                {/* Header nama */}
+                <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                  <p className="text-sm font-semibold truncate">{userName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {ROLE_LABEL[userRole] ?? userRole}
+                  </p>
+                </div>
+
+                {/* Menu items */}
+                <div className="p-1.5">
+                  <Link
+                    href="/profile"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <UserCircle className="h-4 w-4 text-muted-foreground" />
+                    Profil Saya
+                  </Link>
+                </div>
+
+                {/* Logout */}
+                <div className="p-1.5 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    onClick={() => signOut({ callbackUrl: "/login" })}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors w-full"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
