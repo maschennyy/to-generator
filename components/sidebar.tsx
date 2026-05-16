@@ -118,17 +118,17 @@ export function Sidebar({ userRole }: SidebarProps) {
               className="h-10 w-10 rounded-lg bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-white font-bold text-sm flex-shrink-0 mx-auto hover:scale-105 transition-transform"
               title="Buka sidebar"
             >
-              TO
+              N
             </button>
           ) : (
             /* Expanded: logo + teks + tombol collapse */
             <>
               <div className="flex items-center gap-2 overflow-hidden">
                 <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                  TO
+                  N
                 </div>
                 <div className="overflow-hidden">
-                  <h1 className="text-base font-bold dark:text-white whitespace-nowrap">TO Generator</h1>
+                  <h1 className="text-base font-bold dark:text-white whitespace-nowrap">NALAR</h1>
                   <p className="text-xs text-muted-foreground whitespace-nowrap">Capstone Project 2026</p>
                 </div>
               </div>
