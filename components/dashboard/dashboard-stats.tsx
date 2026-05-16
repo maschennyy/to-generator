@@ -67,7 +67,7 @@ export function DashboardStats() {
       title: "Total Pelanggan",
       value: stats.totalPelanggan,
       icon: Users,
-      color: "blue",
+      color: "neutral",
       description: "Pelanggan terdaftar",
       href: "/pelanggan",
     },
@@ -75,7 +75,7 @@ export function DashboardStats() {
       title: "Data Pemakaian",
       value: stats.totalPemakaian,
       icon: TrendingUp,
-      color: "purple",
+      color: "neutral",
       description: "Total record pemakaian",
       href: "/pemakaian",
     },
@@ -83,7 +83,7 @@ export function DashboardStats() {
       title: "TO Historis",
       value: stats.totalToHistoris,
       icon: Database,
-      color: "slate",
+      color: "neutral",
       description: "Pelanggan pernah TO",
       href: "/master-data/to-historis",
     },
@@ -99,7 +99,7 @@ export function DashboardStats() {
       title: "Sedang Diproses",
       value: stats.toDiproses,
       icon: Activity,
-      color: "blue",
+      color: "neutral",
       description: "Sedang ditindaklanjuti",
       href: "/target-operasi?status=DIPROSES",
     },
@@ -114,11 +114,12 @@ export function DashboardStats() {
   ]
 
   const colorClasses: Record<string, string> = {
-    blue: "bg-blue-100 text-blue-600 dark:bg-blue-950 dark:text-blue-400",
-    green: "bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400",
-    amber: "bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400",
-    purple: "bg-purple-100 text-purple-600 dark:bg-purple-950 dark:text-purple-400",
-    slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    neutral:
+      "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300",
+    green:
+      "bg-green-100 text-green-600 dark:bg-green-950 dark:text-green-400",
+    amber:
+      "bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400",
   }
 
   return (
@@ -127,7 +128,7 @@ export function DashboardStats() {
         const Icon = card.icon
         return (
           <Link key={card.title} href={card.href}>
-            <Card className="hover:shadow-md hover:border-blue-200 dark:hover:border-blue-800 transition-all cursor-pointer">
+            <Card className="hover:shadow-md hover:border-neutral-300 dark:hover:border-neutral-700 transition-all cursor-pointer">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs text-muted-foreground">{card.title}</p>
@@ -137,8 +138,12 @@ export function DashboardStats() {
                     <Icon className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="text-2xl font-bold">{card.value.toLocaleString("id-ID")}</p>
-                <p className="text-xs text-muted-foreground mt-1">{card.description}</p>
+                <p className="text-2xl font-bold">
+                  {card.value.toLocaleString("id-ID")}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {card.description}
+                </p>
               </CardContent>
             </Card>
           </Link>

@@ -11,7 +11,6 @@ import {
   FileText,
   AlertTriangle,
   ChevronLeft,
-  ChevronRight,
   ShieldCheck,
   History,
 } from "lucide-react"
@@ -65,7 +64,7 @@ export function Sidebar({ userRole }: SidebarProps) {
 
   if (!isMounted) {
     return (
-      <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-shrink-0 h-screen sticky top-0" />
+      <aside className="w-64 bg-white dark:bg-black border-r border-slate-200 dark:border-neutral-800 flex-shrink-0 h-screen sticky top-0" />
     )
   }
 
@@ -80,8 +79,8 @@ export function Sidebar({ userRole }: SidebarProps) {
           isCollapsed ? "justify-center" : ""
         } ${
           active
-            ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300"
-            : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            ? "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100"
+            : "text-slate-700 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-900 dark:hover:text-neutral-200"
         }`}
       >
         <Icon className="h-5 w-5 flex-shrink-0" />
@@ -108,41 +107,48 @@ export function Sidebar({ userRole }: SidebarProps) {
       <aside
         className={`${
           isCollapsed ? "w-20" : "w-64"
-        } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-in-out`}
+        } bg-white dark:bg-black border-r border-slate-200 dark:border-neutral-800 flex-shrink-0 flex flex-col h-screen sticky top-0 transition-all duration-300 ease-in-out`}
       >
-        {/* Logo + Toggle */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <div className={`flex items-center gap-2 overflow-hidden ${isCollapsed ? "justify-center w-full" : ""}`}>
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+        {/* Header: Logo + Toggle — satu baris, tidak ada yang hilang */}
+        <div className="p-3.5 border-b border-slate-200 dark:border-neutral-800 flex items-center justify-between">
+          {isCollapsed ? (
+            /* Collapsed: hanya logo "TO" yang juga berfungsi sebagai tombol expand */
+            <button
+              onClick={toggleCollapsed}
+              className="h-10 w-10 rounded-lg bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-white font-bold text-sm flex-shrink-0 mx-auto hover:scale-105 transition-transform"
+              title="Buka sidebar"
+            >
               TO
-            </div>
-            {!isCollapsed && (
-              <div className="overflow-hidden">
-                <h1 className="text-base font-bold whitespace-nowrap">TO Generator</h1>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">Capstone Project 2026</p>
+            </button>
+          ) : (
+            /* Expanded: logo + teks + tombol collapse */
+            <>
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-neutral-700 to-black flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  TO
+                </div>
+                <div className="overflow-hidden">
+                  <h1 className="text-base font-bold dark:text-white whitespace-nowrap">TO Generator</h1>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">Capstone Project 2026</p>
+                </div>
               </div>
-            )}
-          </div>
-          {!isCollapsed && (
-            <Button variant="ghost" size="sm" onClick={toggleCollapsed} className="h-8 w-8 p-0 flex-shrink-0">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleCollapsed}
+                className="h-8 w-8 p-0 flex-shrink-0 text-slate-700 dark:text-neutral-400 hover:bg-slate-100 dark:hover:bg-neutral-900"
+                title="Tutup sidebar"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </>
           )}
         </div>
 
-        {isCollapsed && (
-          <div className="p-2 border-b border-slate-200 dark:border-slate-800 flex justify-center">
-            <Button variant="ghost" size="sm" onClick={toggleCollapsed} className="h-8 w-8 p-0">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-
-        {/* Menu Items */}
+        {/* Tidak ada baris tambahan di sini — langsung menu */}
         <nav className="flex-1 overflow-y-auto p-2 space-y-1">
           {menuItems.map(renderLink)}
 
-          {/* Section Admin — hanya tampil untuk ADMIN */}
           {userRole === "ADMIN" && (
             <>
               <div className={`pt-3 pb-1 ${isCollapsed ? "hidden" : ""}`}>
@@ -150,19 +156,19 @@ export function Sidebar({ userRole }: SidebarProps) {
                   Admin
                 </p>
               </div>
-              {isCollapsed && <div className="border-t border-slate-200 dark:border-slate-700 my-2" />}
+              {isCollapsed && <div className="border-t border-slate-200 dark:border-neutral-800 my-2" />}
               {adminMenuItems.map(renderLink)}
             </>
           )}
         </nav>
 
         {/* Footer */}
-        <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${isCollapsed ? "text-center" : ""}`}>
+        <div className={`p-4 border-t border-slate-200 dark:border-neutral-800 ${isCollapsed ? "text-center" : ""}`}>
           {isCollapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center justify-center">
-                  <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center text-xs font-bold text-blue-700 dark:text-blue-300">
+                  <div className="h-8 w-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center text-xs font-bold text-neutral-700 dark:text-neutral-300">
                     {userRole.charAt(0).toUpperCase()}
                   </div>
                 </div>
@@ -175,7 +181,7 @@ export function Sidebar({ userRole }: SidebarProps) {
           ) : (
             <div className="text-xs text-muted-foreground">
               <p className="font-medium">
-                Role: <span className="text-blue-600 dark:text-blue-400">{userRole}</span>
+                Role: <span className="text-neutral-600 dark:text-neutral-400">{userRole}</span>
               </p>
               <p className="mt-1">v1.0.0 - Dev Build</p>
             </div>
