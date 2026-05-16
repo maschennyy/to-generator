@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
+import Link from "next/link"
 import { toast } from "sonner"
 import {
   User,
@@ -16,6 +17,7 @@ import {
   ShieldCheck,
   Shield,
   CalendarDays,
+  DoorOpen,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -188,11 +190,14 @@ export function ProfileClient() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-8">
-      {/* Header profil */}
+      {/* Header profil — layout baru */}
       <div className="flex flex-col sm:flex-row items-center gap-4 bg-white/70 dark:bg-neutral-900/70 backdrop-blur-xl rounded-2xl p-6 shadow-xl border border-neutral-200 dark:border-neutral-800">
+        {/* Avatar */}
         <div className="w-20 h-20 rounded-full bg-gradient-to-br from-neutral-600 to-black flex items-center justify-center text-white text-3xl font-bold shadow-lg ring-4 ring-white dark:ring-black">
           {(profile.nama || "U").charAt(0).toUpperCase()}
         </div>
+
+        {/* Info pengguna */}
         <div className="flex-1 text-center sm:text-left">
           <h2 className="text-2xl font-bold text-neutral-900 dark:text-white">
             {profile.nama}
@@ -204,18 +209,28 @@ export function ProfileClient() {
               {roleConf.label}
             </span>
           </div>
+          {/* Tanggal terdaftar di bawah role */}
+          <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+            <CalendarDays className="h-4 w-4" />
+            Terdaftar {new Date(profile.createdAt).toLocaleDateString("id-ID", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            })}
+          </div>
         </div>
-        <div className="text-sm text-neutral-500 dark:text-neutral-400 flex items-center gap-2">
-          <CalendarDays className="h-4 w-4" />
-          Terdaftar {new Date(profile.createdAt).toLocaleDateString("id-ID", {
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          })}
-        </div>
+
+        {/* Tombol kembali — card kecil di kanan */}
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white/50 dark:bg-neutral-800/50 shadow-sm hover:shadow-md transition-all text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white shrink-0"
+        >
+          <DoorOpen className="h-4 w-4" />
+          Kembali
+        </Link>
       </div>
 
-      {/* Grid utama */}
+      {/* Grid utama — sama seperti sebelumnya */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Data Diri */}
         <Card className="lg:col-span-2 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-xl border-0 shadow-2xl rounded-2xl overflow-hidden">
