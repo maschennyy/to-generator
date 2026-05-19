@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -56,6 +57,7 @@ const ROLE_CONFIG: Record<string, { label: string; icon: typeof User; className:
 
 export function ProfileClient() {
   const { data: session, update } = useSession()
+  const router = useRouter()
   const [profile, setProfile] = useState<ProfileData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
@@ -121,6 +123,7 @@ export function ProfileClient() {
       })
 
       toast.success("Profil berhasil disimpan")
+      router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal menyimpan profil")
     } finally {
