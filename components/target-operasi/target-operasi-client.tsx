@@ -16,9 +16,12 @@ import {
   AlertTriangle,
   RefreshCw,
   FileSpreadsheet,
+  CheckSquare,
+  Square,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -96,6 +99,18 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
+  // ── Bulk selection state ────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBulkDialog, setShowBulkDialog] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<string>("DIPROSES")
+  const [bulkCatatan, setBulkCatatan] = useState("")
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false)
+
+  const allPageIds = data.map((d) => d.id)
+  const allSelected =
+    allPageIds.length > 0 && allPageIds.every((id) => selectedIds.has(id))
+  const someSelected = selectedIds.size > 0
+
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     try {
@@ -127,6 +142,70 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     fetchData()
   }, [fetchData])
 
+  // Reset selection saat data berubah (filter/page)
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [search, page, filterStatus, filterTipe])
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      // Deselect semua di halaman ini
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        allPageIds.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      // Select semua di halaman ini
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        allPageIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  async function handleBulkUpdate() {
+    if (selectedIds.size === 0) return
+    setIsBulkUpdating(true)
+    try {
+      const res = await fetch("/api/target-operasi/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          status: bulkStatus,
+          catatan: bulkCatatan.trim() || null,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error)
+
+      toast.success(`${result.updated} TO berhasil diperbarui`, {
+        description: `Status diubah menjadi ${STATUS_LABEL[bulkStatus]}`,
+      })
+      setShowBulkDialog(false)
+      setSelectedIds(new Set())
+      setBulkCatatan("")
+      fetchData()
+    } catch (err) {
+      toast.error("Gagal update massal", {
+        description: err instanceof Error ? err.message : "Error",
+      })
+    } finally {
+      setIsBulkUpdating(false)
+    }
+  }
+
   async function handleGenerate() {
     setIsGenerating(true)
     try {
@@ -138,9 +217,8 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Gagal generate")
 
-      // Background job — langsung return 202
       toast.success("Generate TO dimulai di latar belakang", {
-        description: `${result.total.toLocaleString("id-ID")} pelanggan sedang dianalisis. Kamu bebas navigasi ke halaman lain.`,
+        description: `${result.total.toLocaleString("id-ID")} pelanggan sedang dianalisis.`,
         duration: 5000,
       })
       setShowGenerateConfirm(false)
@@ -157,19 +235,17 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   async function handleExportExcel() {
     setIsExporting(true)
     try {
-      // Kirim filter sebagai query params — server ambil data langsung dari DB
       const params = new URLSearchParams()
       if (search) params.set("search", search)
       if (filterStatus) params.set("status", filterStatus)
       if (filterTipe) params.set("tipe", filterTipe)
- 
+
       const response = await fetch(`/api/target-operasi/export?${params}`)
- 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}))
         throw new Error(err.error || "Gagal mengekspor")
       }
- 
+
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
@@ -179,16 +255,9 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       a.click()
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
- 
-      // Ambil jumlah baris dari Content-Length tidak praktis,
-      // tampilkan pesan sukses tanpa angka
-      toast.success("Export Excel berhasil", {
-        description: hasActiveFilters
-          ? "Data terfilter berhasil diekspor ke 3 sheet"
-          : "Semua data TO berhasil diekspor ke 3 sheet",
-      })
+
+      toast.success("Export Excel berhasil")
     } catch (err) {
-      console.error(err)
       toast.error("Gagal mengekspor Excel", {
         description: err instanceof Error ? err.message : "Error",
       })
@@ -234,16 +303,12 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10"
-              data-testid="to-search-input"
             />
           </div>
-          <Button type="submit" variant="secondary" data-testid="to-search-button">
-            Cari
-          </Button>
+          <Button type="submit" variant="secondary">Cari</Button>
         </form>
 
         <div className="flex items-center gap-2 shrink-0">
-          {/* Export Excel — selalu tampil jika ada data */}
           <Button
             variant="outline"
             onClick={handleExportExcel}
@@ -253,7 +318,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             {isExporting ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyiapkan...</>
             ) : (
-              <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel{hasActiveFilters ? " (Terfilter)" : ""}</>
+              <><FileSpreadsheet className="mr-2 h-4 w-4" />Export Excel</>
             )}
           </Button>
 
@@ -262,7 +327,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               onClick={() => setShowGenerateConfirm(true)}
               disabled={isGenerating}
               className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-              data-testid="generate-to-button"
             >
               {isGenerating ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menganalisis...</>
@@ -280,7 +344,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
           value={filterStatus}
           onChange={(e) => { setFilterStatus(e.target.value); setPage(1) }}
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-          data-testid="filter-status"
         >
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -291,7 +354,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
           value={filterTipe}
           onChange={(e) => { setFilterTipe(e.target.value); setPage(1) }}
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
-          data-testid="filter-tipe"
         >
           {TIPE_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -299,18 +361,43 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
         </select>
 
         {hasActiveFilters && (
-          <Button variant="outline" size="sm" onClick={resetFilters} data-testid="reset-filters-button">
+          <Button variant="outline" size="sm" onClick={resetFilters}>
             <RefreshCw className="h-3 w-3 mr-1" />
             Reset
           </Button>
         )}
 
         <span className="ml-auto text-sm text-muted-foreground">
-          {hasActiveFilters
-            ? `${total.toLocaleString("id-ID")} TO (terfilter)`
-            : `${total.toLocaleString("id-ID")} TO`}
+          {total.toLocaleString("id-ID")} TO
         </span>
       </div>
+
+      {/* ── Bulk action toolbar — muncul saat ada yang dipilih ── */}
+      {canGenerate && someSelected && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+          <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+          <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+            {selectedIds.size} TO dipilih
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-slate-600"
+            >
+              Batal Pilih
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowBulkDialog(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              Update Status Terpilih
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <Card className="p-0 overflow-hidden">
@@ -320,12 +407,12 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             <span className="ml-2 text-muted-foreground">Memuat...</span>
           </div>
         ) : data.length === 0 ? (
-          <div className="text-center p-16" data-testid="to-empty-state">
+          <div className="text-center p-16">
             <TargetIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
             <p className="font-medium">Belum ada Target Operasi</p>
             <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
               {hasActiveFilters
-                ? "Tidak ada TO yang cocok dengan filter ini. Coba ubah atau reset filter."
+                ? "Tidak ada TO yang cocok. Coba ubah atau reset filter."
                 : canGenerate
                 ? "Klik tombol Generate TO untuk menjalankan deteksi anomali otomatis."
                 : "Hubungi Admin atau SPV untuk men-generate Target Operasi."}
@@ -334,7 +421,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               <Button
                 className="mt-4 bg-blue-600 hover:bg-blue-700"
                 onClick={() => setShowGenerateConfirm(true)}
-                data-testid="generate-to-empty-button"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 Generate TO Sekarang
@@ -346,6 +432,16 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             <table className="w-full">
               <thead className="bg-slate-50 dark:bg-slate-800/50 border-b">
                 <tr>
+                  {/* Checkbox select all */}
+                  {canGenerate && (
+                    <th className="px-3 py-3 w-10">
+                      <Checkbox
+                      checked={allSelected}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Pilih semua di halaman ini"
+                    />
+                    </th>
+                  )}
                   <th className="px-3 py-3 text-left text-xs font-semibold w-12">No</th>
                   <th className="px-3 py-3 text-left text-xs font-semibold">IDPEL</th>
                   <th className="px-3 py-3 text-left text-xs font-semibold">Nama</th>
@@ -366,6 +462,8 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                     canEdit={canGenerate}
                     isAdmin={isAdmin}
                     onChange={fetchData}
+                    selected={selectedIds.has(item.id)}
+                    onToggleSelect={toggleSelect}
                   />
                 ))}
               </tbody>
@@ -381,11 +479,11 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
             Halaman {page} dari {totalPages}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1} data-testid="to-page-prev">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p - 1)} disabled={page === 1}>
               <ChevronLeft className="h-4 w-4" />
               Sebelumnya
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} data-testid="to-page-next">
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages}>
               Berikutnya
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -393,9 +491,69 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
         </div>
       )}
 
+      {/* ── Bulk Update Dialog ───────────────────────────────────────────── */}
+      <AlertDialog open={showBulkDialog} onOpenChange={setShowBulkDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CheckSquare className="h-5 w-5 text-blue-600" />
+              Update {selectedIds.size} Target Operasi
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Semua TO yang dipilih akan diubah statusnya sekaligus.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">
+                Status Baru <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+              >
+                <option value="PENDING">Pending</option>
+                <option value="DIPROSES">Diproses</option>
+                <option value="SELESAI">Selesai</option>
+                <option value="DIBATALKAN">Dibatalkan</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1.5 block">
+                Catatan (opsional — berlaku untuk semua TO terpilih)
+              </label>
+              <textarea
+                value={bulkCatatan}
+                onChange={(e) => setBulkCatatan(e.target.value)}
+                placeholder="Catatan hasil tindak lanjut..."
+                className="w-full min-h-[80px] p-3 rounded-md border border-input bg-background text-sm"
+              />
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkUpdating}>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkUpdate}
+              disabled={isBulkUpdating}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isBulkUpdating ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Menyimpan...</>
+              ) : (
+                `Update ${selectedIds.size} TO`
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Generate Confirm Dialog */}
       <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
-        <AlertDialogContent data-testid="generate-confirm-dialog">
+        <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-blue-600" />
@@ -413,8 +571,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                 <li>Pola tidak wajar (zigzag, meter statis, penurunan bertahap)</li>
               </ul>
               <p className="text-xs pt-1">
-                Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke
-                halaman lain. Progress ditampilkan di banner bawah.
+                Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke halaman lain.
               </p>
             </div>
           </AlertDialogHeader>
@@ -424,7 +581,6 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
               onClick={handleGenerate}
               disabled={isGenerating}
               className="bg-blue-600 hover:bg-blue-700"
-              data-testid="confirm-generate-button"
             >
               {isGenerating ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Memulai...</>

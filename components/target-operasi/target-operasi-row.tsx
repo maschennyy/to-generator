@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -68,6 +69,9 @@ interface RowProps {
   canEdit: boolean
   isAdmin: boolean
   onChange: () => void
+  // Checkbox props
+  selected: boolean
+  onToggleSelect: (id: string) => void
 }
 
 const TIPE_INFO = {
@@ -103,6 +107,8 @@ export function TargetOperasiRow({
   canEdit,
   isAdmin,
   onChange,
+  selected,
+  onToggleSelect,
 }: RowProps) {
   const [isUpdating, setIsUpdating] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -118,10 +124,8 @@ export function TargetOperasiRow({
     amber: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
     blue: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
     red: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-    purple:
-      "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
-    slate:
-      "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    purple: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+    slate: "bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   }
 
   async function updateStatus(status: TargetOperasiItem["status"]) {
@@ -207,9 +211,24 @@ export function TargetOperasiRow({
   return (
     <>
       <tr
-        className="border-b hover:bg-slate-50 dark:hover:bg-slate-800/30"
+        className={`border-b transition-colors ${
+          selected
+            ? "bg-blue-50 dark:bg-blue-950/20"
+            : "hover:bg-slate-50 dark:hover:bg-slate-800/30"
+        }`}
         data-testid={`to-row-${item.id}`}
       >
+        {/* Checkbox */}
+        {canEdit && (
+          <td className="px-3 py-3 w-10">
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onToggleSelect(item.id)}
+              aria-label={`Pilih TO ${item.pelanggan.idPelanggan}`}
+            />
+          </td>
+        )}
+
         <td className="px-3 py-3 text-sm text-muted-foreground">{index + 1}</td>
         <td className="px-3 py-3 text-sm font-mono">
           {item.pelanggan.idPelanggan}
@@ -327,9 +346,7 @@ export function TargetOperasiRow({
               <select
                 value={editStatus}
                 onChange={(e) =>
-                  setEditStatus(
-                    e.target.value as TargetOperasiItem["status"]
-                  )
+                  setEditStatus(e.target.value as TargetOperasiItem["status"])
                 }
                 className="w-full h-10 px-3 rounded-md border border-input bg-background"
                 data-testid="edit-status-select"

@@ -38,32 +38,59 @@ export const NAMA_BULAN_PENDEK = [
   "Jul", "Agu", "Sep", "Okt", "Nov", "Des",
 ]
 
-// Fungsi: dapatkan 12 bulan terakhir (rolling)
-// Contoh: kalau sekarang April 2026, return dari Maret 2025 sampai Maret 2026
+// Fungsi: dapatkan 12 bulan terakhir termasuk bulan SEKARANG
+// Contoh: kalau sekarang Mei 2026, return dari Jun 2025 sampai Mei 2026
 export function getRolling12Months(): { bulan: number; tahun: number }[] {
   const now = new Date()
   const currentMonth = now.getMonth() + 1 // 1-12
   const currentYear = now.getFullYear()
-
-  // Mulai dari bulan kemarin (bulan ini - 1)
-  const endMonth = currentMonth === 1 ? 12 : currentMonth - 1
-  const endYear = currentMonth === 1 ? currentYear - 1 : currentYear
-
+ 
   const months: { bulan: number; tahun: number }[] = []
-
-  // Loop mundur 12 bulan
-  for (let i = 0; i < 12; i++) {
-    let month = endMonth - i
-    let year = endYear
-
+ 
+  // Loop mundur 12 bulan dari bulan INI (bukan bulan kemarin)
+  for (let i = 11; i >= 0; i--) {
+    let month = currentMonth - i
+    let year = currentYear
+ 
     while (month <= 0) {
       month += 12
       year -= 1
     }
-
-    months.unshift({ bulan: month, tahun: year })
+ 
+    months.push({ bulan: month, tahun: year })
   }
-
+ 
+  return months
+}
+ 
+// Fungsi: generate daftar bulan antara dua titik (inklusif)
+// Dipakai untuk filter rentang bulan di halaman pemakaian
+export function generateMonthRange(
+  dariBulan: number,
+  dariTahun: number,
+  sampaiBulan: number,
+  sampaiTahun: number
+): { bulan: number; tahun: number }[] {
+  const months: { bulan: number; tahun: number }[] = []
+  let month = dariBulan
+  let year = dariTahun
+ 
+  const maxIter = 120 // batas 10 tahun untuk keamanan
+  let iter = 0
+ 
+  while (
+    (year < sampaiTahun || (year === sampaiTahun && month <= sampaiBulan)) &&
+    iter < maxIter
+  ) {
+    months.push({ bulan: month, tahun: year })
+    month++
+    if (month > 12) {
+      month = 1
+      year++
+    }
+    iter++
+  }
+ 
   return months
 }
 

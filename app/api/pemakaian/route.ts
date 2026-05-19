@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { pemakaianSchema, getRolling12Months } from "@/lib/validations/pemakaian"
+import {
+  pemakaianSchema,
+  getRolling12Months,
+  generateMonthRange,
+} from "@/lib/validations/pemakaian"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
-// GET /api/pemakaian - Format pivot rolling 12 bulan
+// GET /api/pemakaian - Format pivot, default rolling 12 bulan termasuk bulan ini
 export async function GET(request: NextRequest) {
   try {
     const session = await auth()
@@ -19,13 +23,37 @@ export async function GET(request: NextRequest) {
     const isExport = searchParams.get("export") === "true"
     const skip = (page - 1) * limit
 
-    const months = getRolling12Months()
+    // Parameter rentang bulan opsional
+    const dariBulan = parseInt(searchParams.get("dariBulan") || "0")
+    const dariTahun = parseInt(searchParams.get("dariTahun") || "0")
+    const sampaiBulan = parseInt(searchParams.get("sampaiBulan") || "0")
+    const sampaiTahun = parseInt(searchParams.get("sampaiTahun") || "0")
+
+    // Tentukan daftar bulan yang ditampilkan
+    let months: { bulan: number; tahun: number }[]
+
+    const hasCustomRange =
+      dariBulan >= 1 && dariBulan <= 12 &&
+      dariTahun >= 2020 &&
+      sampaiBulan >= 1 && sampaiBulan <= 12 &&
+      sampaiTahun >= 2020 &&
+      (dariTahun < sampaiTahun || (dariTahun === sampaiTahun && dariBulan <= sampaiBulan))
+
+    if (hasCustomRange) {
+      months = generateMonthRange(dariBulan, dariTahun, sampaiBulan, sampaiTahun)
+      // Batasi maksimal 24 bulan untuk performa
+      if (months.length > 24) {
+        months = months.slice(months.length - 24)
+      }
+    } else {
+      months = getRolling12Months()
+    }
 
     const whereClause: {
       OR?: Array<{ [key: string]: { contains: string; mode: "insensitive" } }>
       pemakaian?: { some: object }
     } = {
-      pemakaian: { some: {} }
+      pemakaian: { some: {} },
     }
 
     if (search) {
@@ -107,6 +135,7 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+
 
 // POST /api/pemakaian - Input pemakaian dengan AUTO-CREATE pelanggan
 export async function POST(request: NextRequest) {
