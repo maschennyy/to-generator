@@ -4,25 +4,26 @@ import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 
 // PATCH /api/users/[id] — edit user atau reset password
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await auth()
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { nama, role, aktif, newPassword } = body
 
     const existing = await prisma.user.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 })
 
-    // Cegah admin menonaktifkan dirinya sendiri
     if (id === session.user.id && aktif === false) {
       return NextResponse.json({ error: "Tidak bisa menonaktifkan akun sendiri" }, { status: 400 })
     }
 
-    // Cegah admin mengubah role dirinya sendiri
     if (id === session.user.id && role && role !== existing.role) {
       return NextResponse.json({ error: "Tidak bisa mengubah role akun sendiri" }, { status: 400 })
     }
@@ -62,13 +63,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 // DELETE /api/users/[id] — hapus user
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const session = await auth()
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (session.user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    const { id } = params
+    const { id } = await params
 
     if (id === session.user.id) {
       return NextResponse.json({ error: "Tidak bisa menghapus akun sendiri" }, { status: 400 })
