@@ -200,3 +200,8 @@ model ImportJob {
 
   @@map("import_jobs")
 }
+generator client {
+  provider      = "prisma-client"
+  output        = "../lib/generated/prisma"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
