@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import * as XLSX from "xlsx"
+import { auth } from "@/auth"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
 interface ParsedRow {
@@ -12,6 +13,14 @@ interface ParsedRow {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await auth()
+    if (!session?.user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+    }
+    if (session.user.role !== "ADMIN") {
+      return NextResponse.json({ success: false, message: "Forbidden: Hanya Admin" }, { status: 403 })
+    }
+
     const formData = await req.formData()
     const file = formData.get("file") as File
 

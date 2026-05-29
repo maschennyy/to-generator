@@ -8,7 +8,6 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Loader2,
   Download,
   X,
@@ -23,7 +22,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { NAMA_BULAN } from "@/lib/validations/pemakaian"
-import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
 interface ParsedRow {
   row: number
@@ -38,60 +36,6 @@ interface ParsedRow {
   dataLengkap: boolean
   status: "valid" | "invalid"
   error?: string
-}
-
-const BULAN_MAP: Record<string, number> = {
-  JAN: 1, FEB: 2, MAR: 3, APR: 4, MEI: 5, MAY: 5,
-  JUN: 6, JUL: 7, AGU: 8, AUG: 8, SEP: 9, OKT: 10,
-  OCT: 10, NOV: 11, DES: 12, DEC: 12,
-}
-
-function parseBulanTahun(blthValue: unknown): { bulan: number; tahun: number } | null {
-  if (!blthValue) return null
-
-  // Kalau Date object (dari Excel)
-  if (blthValue instanceof Date) {
-    return {
-      bulan: blthValue.getMonth() + 1,
-      tahun: blthValue.getFullYear(),
-    }
-  }
-
-  // Kalau number (Excel serial date)
-  if (typeof blthValue === "number") {
-    const excelEpoch = new Date(1900, 0, 1)
-    const days = blthValue - 2
-    const date = new Date(excelEpoch.getTime() + days * 24 * 60 * 60 * 1000)
-    return {
-      bulan: date.getMonth() + 1,
-      tahun: date.getFullYear(),
-    }
-  }
-
-  const clean = String(blthValue).trim().toUpperCase()
-
-  // Format: "Apr-26", "APR-2026"
-  const match1 = clean.match(/^([A-Z]+)[-\s](\d+)$/)
-  if (match1) {
-    const bulanStr = match1[1].substring(0, 3)
-    const tahunStr = match1[2]
-    const bulan = BULAN_MAP[bulanStr]
-    if (!bulan) return null
-    let tahun = parseInt(tahunStr)
-    if (tahun < 100) tahun = 2000 + tahun
-    return { bulan, tahun }
-  }
-
-  // Format: "01/2026", "1-2026"
-  const match2 = clean.match(/^(\d{1,2})[\/-](\d{2,4})$/)
-  if (match2) {
-    const bulan = parseInt(match2[1])
-    let tahun = parseInt(match2[2])
-    if (tahun < 100) tahun = 2000 + tahun
-    if (bulan >= 1 && bulan <= 12) return { bulan, tahun }
-  }
-
-  return null
 }
 
 export function ImportPemakaianForm() {

@@ -22,7 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
 interface ParsedRow {
   row: number
@@ -64,30 +63,6 @@ export function ImportToHistorisForm() {
 
     setFile(selectedFile)
     parseExcel(selectedFile)
-  }
-
-  function parseDate(dateValue: unknown): string | null {
-    if (!dateValue) return null
-
-    if (dateValue instanceof Date) {
-      return dateValue.toISOString()
-    }
-
-    if (typeof dateValue === "number") {
-      const excelEpoch = new Date(1900, 0, 1)
-      const days = dateValue - 2
-      const date = new Date(excelEpoch.getTime() + days * 24 * 60 * 60 * 1000)
-      return date.toISOString()
-    }
-
-    if (typeof dateValue === "string") {
-      const parsed = new Date(dateValue)
-      if (!isNaN(parsed.getTime())) {
-        return parsed.toISOString()
-      }
-    }
-
-    return null
   }
 
   async function parseExcel(file: File) {

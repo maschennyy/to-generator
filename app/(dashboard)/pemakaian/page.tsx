@@ -44,7 +44,7 @@ export default async function PemakaianPage() {
       </div>
 
       {/* Table */}
-      <PemakaianTable isAdmin={isAdmin} />
+      <PemakaianTable />
     </div>
   )
 }

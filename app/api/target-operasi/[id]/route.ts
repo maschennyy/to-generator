@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import type { StatusTO } from "@prisma/client"
+import type { StatusTO } from "@/lib/generated/prisma/enums"
 
 const VALID_STATUS: StatusTO[] = [
   "PENDING",

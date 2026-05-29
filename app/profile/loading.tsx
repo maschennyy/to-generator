@@ -1,4 +1,4 @@
-import { SkeletonBlock, SkeletonCard } from "@/components/ui/skeleton-utils"
+import { SkeletonBlock } from "@/components/ui/skeleton-utils"
 
 export default function ProfileLoading() {
   return (

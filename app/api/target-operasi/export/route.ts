@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import type { StatusTO, TipeAnomali } from "@/lib/generated/prisma/enums";
 
 const TIPE_LABEL: Record<string, string> = {
   TURUN_DRASTIS: "Turun Drastis",
@@ -18,6 +20,15 @@ const STATUS_LABEL: Record<string, string> = {
   DIBATALKAN: "Dibatalkan",
 };
 
+const VALID_STATUS: StatusTO[] = ["PENDING", "DIPROSES", "SELESAI", "DIBATALKAN"];
+const VALID_TIPE: TipeAnomali[] = [
+  "TURUN_DRASTIS",
+  "STAGNAN",
+  "NOL_PEMAKAIAN",
+  "LONJAKAN",
+  "POLA_TIDAK_WAJAR",
+];
+
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -31,11 +42,14 @@ export async function GET(request: NextRequest) {
     const filterTipe = searchParams.get("tipe") ?? "";
     const filterPeriode = searchParams.get("periode") ?? "";
 
-    // Gunakan any agar tidak dicek ketat oleh TypeScript
-    const where: any = {};
+    const where: Prisma.TargetOperasiWhereInput = {};
 
-    if (filterStatus) where.status = filterStatus;
-    if (filterTipe) where.tipeAnomali = filterTipe;
+    if (filterStatus && VALID_STATUS.includes(filterStatus as StatusTO)) {
+      where.status = filterStatus as StatusTO;
+    }
+    if (filterTipe && VALID_TIPE.includes(filterTipe as TipeAnomali)) {
+      where.tipeAnomali = filterTipe as TipeAnomali;
+    }
     if (filterPeriode) where.periode = filterPeriode;
 
     if (search) {

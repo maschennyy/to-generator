@@ -150,7 +150,7 @@ export function UserManagementClient({ currentUserId }: Props) {
       {/* Action bar */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {users.length} user terdaftar · {totalAktif} aktif
+          {users.length} user terdaftar · {totalAktif} aktif · {totalUser} pengguna
         </p>
         <Button
           onClick={() => setShowAddDialog(true)}

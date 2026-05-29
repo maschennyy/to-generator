@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import type { StatusTO, TipeAnomali } from "@prisma/client"
+import type { StatusTO, TipeAnomali } from "@/lib/generated/prisma/enums"
 
 /**
  * GET /api/laporan

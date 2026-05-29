@@ -34,10 +34,6 @@ interface Month {
   tahun: number
 }
 
-interface PemakaianTableProps {
-  isAdmin: boolean
-}
-
 // Generate daftar tahun untuk dropdown (5 tahun ke belakang s.d. sekarang)
 function getYearOptions() {
   const now = new Date()
@@ -54,7 +50,7 @@ const BULAN_OPTIONS = NAMA_BULAN_PENDEK.map((label, i) => ({
   label,
 }))
 
-export function PemakaianTable({ isAdmin }: PemakaianTableProps) {
+export function PemakaianTable() {
   const [data, setData] = useState<PemakaianData[]>([])
   const [months, setMonths] = useState<Month[]>([])
   const [isLoading, setIsLoading] = useState(true)

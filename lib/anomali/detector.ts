@@ -12,7 +12,7 @@
  *       (c) Penurunan Bertahap  : tren turun konsisten > 5 bulan, total > 40%
  */
 
-import type { TipeAnomali } from "@prisma/client"
+import type { TipeAnomali } from "@/lib/generated/prisma/enums"
 
 export interface PemakaianSample {
   bulan: number

@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react"
 import { LogOut, User, UserCircle, ChevronDown } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 

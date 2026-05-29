@@ -1,7 +1,7 @@
 import { config } from "dotenv"
 config()
 
-import { PrismaClient } from "@prisma/client"
+import { PrismaClient } from "../lib/generated/prisma/client"
 import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
@@ -170,7 +170,7 @@ async function main() {
     create: { username: "spv", password: spvPass, nama: "Supervisor Teknik", role: "SPV" },
   })
 
-  const user = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { username: "user" },
     update: {},
     create: { username: "user", password: userPass, nama: "Petugas Lapangan", role: "USER" },

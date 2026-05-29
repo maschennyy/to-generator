@@ -1,7 +1,6 @@
 import {
   SkeletonPageHeader,
   SkeletonStatCards,
-  SkeletonTable,
   SkeletonBlock,
 } from "@/components/ui/skeleton-utils"
 

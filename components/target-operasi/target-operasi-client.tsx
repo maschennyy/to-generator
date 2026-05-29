@@ -17,7 +17,6 @@ import {
   RefreshCw,
   FileSpreadsheet,
   CheckSquare,
-  Square,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -67,14 +66,6 @@ const STATUS_OPTIONS = [
   { value: "SELESAI", label: "Selesai" },
   { value: "DIBATALKAN", label: "Dibatalkan" },
 ]
-
-const TIPE_LABEL: Record<string, string> = {
-  TURUN_DRASTIS: "Turun Drastis",
-  STAGNAN: "Stagnan",
-  NOL_PEMAKAIAN: "Nol Pemakaian",
-  LONJAKAN: "Lonjakan",
-  POLA_TIDAK_WAJAR: "Pola Tidak Wajar",
-}
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
