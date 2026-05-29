@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/lib/generated/prisma/client";
-import type { StatusTO, TipeAnomali } from "@/lib/generated/prisma/enums";
+import type { Prisma, StatusTO, TipeAnomali } from "@prisma/client";
 
 const TIPE_LABEL: Record<string, string> = {
   TURUN_DRASTIS: "Turun Drastis",

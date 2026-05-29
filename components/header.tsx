@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import { signOut } from "next-auth/react"
 import { LogOut, User, Shield, UserCog, ChevronDown } from "lucide-react"
-import type { Role } from "@/lib/generated/prisma/enums"
+import type { Role } from "@prisma/client"
 
 interface HeaderProps {
   user: {
