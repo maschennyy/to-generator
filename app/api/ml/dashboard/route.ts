@@ -41,6 +41,16 @@ type OperationalLabelRow = {
   operational_normal: number
 }
 
+type OperationalRiskBandRow = {
+  band: "high" | "medium" | "low"
+  total_target: number
+  total_checked: number
+  violations: number
+  normal: number
+  not_found: number
+  hit_rate: number | null
+}
+
 type DataQualityRow = {
   pelanggan_without_usage: number
   to_historis_without_usage: number
@@ -83,7 +93,15 @@ export async function GET() {
     `
     const hasHasilTable = hasilTableRows[0]?.exists ?? false
 
-    const [trainingRows, latestHistoryRows, monthlyFindings, operationalRows, operationalLabelRows, dataQualityRows] = await Promise.all([
+    const [
+      trainingRows,
+      latestHistoryRows,
+      monthlyFindings,
+      operationalRows,
+      operationalLabelRows,
+      operationalRiskBandRows,
+      dataQualityRows,
+    ] = await Promise.all([
       hasFeaturesTable
         ? prisma.$queryRaw<TrainingStatsRow[]>`
             SELECT
@@ -145,6 +163,41 @@ export async function GET() {
               COUNT(DISTINCT "pelangganId") FILTER (WHERE "hasil" = 'PELANGGARAN')::int AS "operational_violations",
               COUNT(DISTINCT "pelangganId") FILTER (WHERE "hasil" = 'NORMAL')::int AS "operational_normal"
             FROM "hasil_operasi"
+          `
+        : Promise.resolve([]),
+      hasHasilTable
+        ? prisma.$queryRaw<OperationalRiskBandRow[]>`
+            WITH banded AS (
+              SELECT
+                CASE
+                  WHEN t."skor" >= 0.70 THEN 'high'
+                  WHEN t."skor" >= 0.40 THEN 'medium'
+                  ELSE 'low'
+                END AS "band",
+                ho."hasil"
+              FROM "target_operasi" t
+              LEFT JOIN "hasil_operasi" ho
+                ON ho."targetOperasiId" = t."id"
+            )
+            SELECT
+              "band",
+              COUNT(*)::int AS "total_target",
+              COUNT(*) FILTER (
+                WHERE "hasil" IN ('NORMAL', 'PELANGGARAN', 'TIDAK_DITEMUKAN')
+              )::int AS "total_checked",
+              COUNT(*) FILTER (WHERE "hasil" = 'PELANGGARAN')::int AS "violations",
+              COUNT(*) FILTER (WHERE "hasil" = 'NORMAL')::int AS "normal",
+              COUNT(*) FILTER (WHERE "hasil" = 'TIDAK_DITEMUKAN')::int AS "not_found",
+              CASE
+                WHEN COUNT(*) FILTER (WHERE "hasil" IN ('NORMAL', 'PELANGGARAN')) = 0 THEN NULL
+                ELSE (
+                  COUNT(*) FILTER (WHERE "hasil" = 'PELANGGARAN')::double precision
+                  / COUNT(*) FILTER (WHERE "hasil" IN ('NORMAL', 'PELANGGARAN'))::double precision
+                )
+              END AS "hit_rate"
+            FROM banded
+            GROUP BY "band"
+            ORDER BY CASE "band" WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
           `
         : Promise.resolve([]),
       hasFeaturesTable
@@ -261,6 +314,7 @@ export async function GET() {
         operational_violations: 0,
         operational_normal: 0,
       },
+      operationalByRiskBand: normalizeOperationalRiskBands(operationalRiskBandRows),
       dataQuality: dataQualityRows[0] ?? {
         pelanggan_without_usage: 0,
         to_historis_without_usage: 0,
@@ -292,4 +346,19 @@ export async function GET() {
       { status: 503 }
     )
   }
+}
+
+function normalizeOperationalRiskBands(rows: OperationalRiskBandRow[]) {
+  const byBand = new Map(rows.map((row) => [row.band, row]))
+  return (["high", "medium", "low"] as const).map((band) => (
+    byBand.get(band) ?? {
+      band,
+      total_target: 0,
+      total_checked: 0,
+      violations: 0,
+      normal: 0,
+      not_found: 0,
+      hit_rate: null,
+    }
+  ))
 }

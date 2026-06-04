@@ -56,7 +56,7 @@ export function Sidebar({ userRole }: SidebarProps) {
   ]
 
   const adminMenuItems = [
-    { href: "/admin/ml-dashboard", label: "NALAR Dashboard", icon: Brain },
+    { href: "/admin/nalar-dashboard", label: "NALAR Dashboard", icon: Brain },
     { href: "/admin/pengaturan", label: "Pengaturan", icon: Settings },
     { href: "/admin/users", label: "Manajemen User", icon: ShieldCheck },
     { href: "/admin/log", label: "Log Aktivitas", icon: History },

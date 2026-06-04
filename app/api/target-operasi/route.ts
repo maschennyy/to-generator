@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { detectAnomaly, getPeriode } from "@/lib/anomali/detector"
+import { detectAnomaly, getPeriode, type AnomalyHit } from "@/lib/anomali/detector"
 
 type HasilOperasiRow = {
   targetOperasiId: string
@@ -11,6 +11,17 @@ type HasilOperasiRow = {
   catatan: string | null
 }
 type TableCheckRow = { exists: boolean }
+type NalarFeatureRow = {
+  pelanggan_id: string
+  rata_kwh_3bln: number | null
+  rata_kwh_6bln: number | null
+  rata_kwh_12bln: number | null
+  tren_kwh: number | null
+  volatilitas_kwh: number | null
+  penurunan_tiba2: number
+  bulan_data: number
+  is_violation: number
+}
 
 // GET /api/target-operasi — tidak berubah, tetap sama
 export async function GET(request: NextRequest) {
@@ -243,6 +254,7 @@ export async function DELETE(request: NextRequest) {
 // ============================================================
 
 const BATCH_SIZE = 200
+const NALAR_REASON_PREFIX = "Sinyal NALAR"
 
 async function runGenerateTO(
   jobId: string,
@@ -253,6 +265,7 @@ async function runGenerateTO(
   let detected = 0
   let created = 0
   let skipped = 0
+  let nalarPrioritized = 0
 
   // Ambil semua pelanggan yang punya data pemakaian
   const pelangganList = await prisma.pelanggan.findMany({
@@ -263,9 +276,13 @@ async function runGenerateTO(
       },
     },
   })
+  const hasNalarFeatures = await hasNalarFeatureTable()
 
   for (let i = 0; i < pelangganList.length; i += BATCH_SIZE) {
     const batch = pelangganList.slice(i, i + BATCH_SIZE)
+    const nalarFeatureByPelangganId = hasNalarFeatures
+      ? await loadNalarFeatureMap(batch.map((pelanggan) => pelanggan.id))
+      : new Map<string, NalarFeatureRow>()
 
     for (const pelanggan of batch) {
       const samples = pelanggan.pemakaian.map((p) => ({
@@ -284,6 +301,10 @@ async function runGenerateTO(
 
       detected++
       const periode = getPeriode(samples)
+      const prioritizedHit = applyNalarPriority(hit, nalarFeatureByPelangganId.get(pelanggan.id))
+      if (prioritizedHit.skor > hit.skor) {
+        nalarPrioritized++
+      }
 
       const existing = await prisma.targetOperasi.findFirst({
         where: { pelangganId: pelanggan.id, periode },
@@ -294,9 +315,9 @@ async function runGenerateTO(
           await prisma.targetOperasi.update({
             where: { id: existing.id },
             data: {
-              tipeAnomali: hit.tipeAnomali,
-              alasan: hit.alasan,
-              skor: hit.skor,
+              tipeAnomali: prioritizedHit.tipeAnomali,
+              alasan: prioritizedHit.alasan,
+              skor: prioritizedHit.skor,
             },
           })
           created++
@@ -309,9 +330,9 @@ async function runGenerateTO(
       await prisma.targetOperasi.create({
         data: {
           pelangganId: pelanggan.id,
-          tipeAnomali: hit.tipeAnomali,
-          alasan: hit.alasan,
-          skor: hit.skor,
+          tipeAnomali: prioritizedHit.tipeAnomali,
+          alasan: prioritizedHit.alasan,
+          skor: prioritizedHit.skor,
           periode,
           status: "PENDING",
           createdById: userId,
@@ -343,7 +364,87 @@ async function runGenerateTO(
     data: {
       userId,
       aksi: "GENERATE_TO",
-      detail: `Background Generate TO: ${pelangganList.length} dianalisis, ${detected} anomali, ${created} TO dibuat/diperbarui.`,
+      detail: `Background Generate TO: ${pelangganList.length} dianalisis, ${detected} anomali, ${created} TO dibuat/diperbarui, ${nalarPrioritized} diprioritaskan sinyal NALAR.`,
     },
   })
+}
+
+async function hasNalarFeatureTable() {
+  const [featuresTable] = await prisma.$queryRaw<TableCheckRow[]>`
+    SELECT to_regclass('public.ml_customer_features') IS NOT NULL AS "exists"
+  `
+  return featuresTable?.exists ?? false
+}
+
+async function loadNalarFeatureMap(pelangganIds: string[]) {
+  if (pelangganIds.length === 0) return new Map<string, NalarFeatureRow>()
+
+  const rows = await prisma.$queryRaw<NalarFeatureRow[]>`
+    SELECT
+      "pelanggan_id",
+      "rata_kwh_3bln",
+      "rata_kwh_6bln",
+      "rata_kwh_12bln",
+      "tren_kwh",
+      "volatilitas_kwh",
+      "penurunan_tiba2",
+      "bulan_data",
+      "is_violation"
+    FROM "ml_customer_features"
+    WHERE "pelanggan_id" = ANY(${pelangganIds})
+  `
+
+  return new Map(rows.map((row) => [row.pelanggan_id, row]))
+}
+
+function applyNalarPriority(hit: AnomalyHit, feature?: NalarFeatureRow): AnomalyHit {
+  if (!feature || feature.bulan_data <= 0) return hit
+
+  const reasons: string[] = []
+  let boost = 0
+
+  if (feature.is_violation === 1) {
+    boost += 0.08
+    reasons.push("pelanggan punya label historis/operasional pelanggaran")
+  }
+
+  if (feature.penurunan_tiba2 === 1) {
+    boost += 0.07
+    reasons.push("ada penurunan kWh tiba-tiba lebih dari 30%")
+  }
+
+  const recentAvg = numberOrNull(feature.rata_kwh_3bln)
+  const trend = numberOrNull(feature.tren_kwh)
+  if (recentAvg !== null && trend !== null && trend < 0) {
+    const previousAvg = recentAvg - trend
+    if (previousAvg > 0) {
+      const dropRatio = Math.abs(trend) / previousAvg
+      if (dropRatio >= 0.3) {
+        boost += Math.min(0.12, dropRatio * 0.16)
+        reasons.push(`rata-rata 3 bulan terbaru turun ${Math.round(dropRatio * 100)}%`)
+      }
+    }
+  }
+
+  const volatility = numberOrNull(feature.volatilitas_kwh)
+  const yearlyAvg = numberOrNull(feature.rata_kwh_12bln)
+  if (volatility !== null && yearlyAvg !== null && yearlyAvg > 0) {
+    const volatilityRatio = volatility / yearlyAvg
+    if (volatilityRatio >= 0.5) {
+      boost += Math.min(0.08, volatilityRatio * 0.06)
+      reasons.push("pemakaian 12 bulan sangat tidak stabil")
+    }
+  }
+
+  if (boost <= 0 || reasons.length === 0) return hit
+
+  return {
+    ...hit,
+    skor: Math.min(1, Number((hit.skor + boost).toFixed(4))),
+    alasan: `${hit.alasan} ${NALAR_REASON_PREFIX}: ${reasons.join("; ")}.`,
+  }
+}
+
+function numberOrNull(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null
 }

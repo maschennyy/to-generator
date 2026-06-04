@@ -42,6 +42,7 @@ type DashboardData = {
     operational_violations: number
     operational_normal: number
   }
+  operationalByRiskBand?: RiskBandRow[]
   dataQuality?: {
     pelanggan_without_usage: number
     to_historis_without_usage: number
@@ -54,6 +55,18 @@ type DashboardData = {
     missingTables: string[]
     message: string | null
   }
+}
+
+type RiskBandKey = "high" | "medium" | "low"
+
+type RiskBandRow = {
+  band: RiskBandKey
+  total_target: number
+  total_checked: number
+  violations: number
+  normal: number
+  not_found: number
+  hit_rate: number | null
 }
 
 type FeatureImportance = {
@@ -148,6 +161,20 @@ export function MlDashboardClient() {
 
   const maxMonthly = Math.max(...(dashboard?.monthlyFindings.map((item) => item.total) ?? [1]), 1)
   const maxFeature = Math.max(...features.map((item) => item.importance), 0.001)
+  const riskBandRows = useMemo(() => {
+    const byBand = new Map((dashboard?.operationalByRiskBand ?? []).map((row) => [row.band, row]))
+    return (["high", "medium", "low"] as const).map((band) => (
+      byBand.get(band) ?? {
+        band,
+        total_target: 0,
+        total_checked: 0,
+        violations: 0,
+        normal: 0,
+        not_found: 0,
+        hit_rate: null,
+      }
+    ))
+  }, [dashboard?.operationalByRiskBand])
 
   return (
     <div className="space-y-5">
@@ -343,6 +370,22 @@ export function MlDashboardClient() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Efektivitas per Band Risiko</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {riskBandRows.map((row) => (
+              <RiskBandSummary key={row.band} row={row} />
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Band risiko memakai skor prioritas Target Operasi. Setelah Generate TO terbaru, skor ini ikut diperkuat oleh sinyal fitur NALAR.
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader>
@@ -454,6 +497,65 @@ function PerformanceCard({
       <p className="mt-3 text-sm text-muted-foreground">{text}</p>
     </div>
   )
+}
+
+function RiskBandSummary({ row }: { row: RiskBandRow }) {
+  const meta = RISK_BAND_META[row.band]
+  return (
+    <div className="rounded-lg border p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">{meta.label}</p>
+          <p className="text-xs text-muted-foreground">{meta.range}</p>
+        </div>
+        <span className={`rounded-md px-2 py-1 text-xs font-semibold ${meta.badge}`}>
+          {formatPercentValue(row.hit_rate)}
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+        <RiskBandStat label="Target" value={formatNumber(row.total_target)} />
+        <RiskBandStat label="Dioperasi" value={formatNumber(row.total_checked)} />
+        <RiskBandStat label="Terbukti" value={formatNumber(row.violations)} />
+        <RiskBandStat label="Normal" value={formatNumber(row.normal)} />
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+        <div
+          className={`h-2 rounded-full ${meta.bar}`}
+          style={{ width: `${Math.max(0, Math.min(100, Math.round((row.hit_rate ?? 0) * 100)))}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function RiskBandStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-semibold">{value}</p>
+    </div>
+  )
+}
+
+const RISK_BAND_META: Record<RiskBandKey, { label: string; range: string; badge: string; bar: string }> = {
+  high: {
+    label: "Risiko Tinggi",
+    range: "Skor 70-100",
+    badge: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+    bar: "bg-red-600",
+  },
+  medium: {
+    label: "Risiko Menengah",
+    range: "Skor 40-69",
+    badge: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+    bar: "bg-amber-500",
+  },
+  low: {
+    label: "Risiko Rendah",
+    range: "Skor 0-39",
+    badge: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    bar: "bg-slate-500",
+  },
 }
 
 function StatusLine({ label, value }: { label: string; value: string }) {
