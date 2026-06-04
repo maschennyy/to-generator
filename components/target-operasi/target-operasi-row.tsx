@@ -50,6 +50,12 @@ export type TargetOperasiItem = {
   status: "PENDING" | "DIPROSES" | "SELESAI" | "DIBATALKAN"
   periode: string
   catatan: string | null
+  hasilOperasi: {
+    hasil: "BELUM_DIPERIKSA" | "NORMAL" | "PELANGGARAN" | "TIDAK_DITEMUKAN"
+    tanggalOperasi: string | null
+    kategoriTemuan: string | null
+    catatan: string | null
+  } | null
   createdAt: string
   pelanggan: {
     id: string
@@ -69,9 +75,21 @@ interface RowProps {
   canEdit: boolean
   isAdmin: boolean
   onChange: () => void
+  mlScore?: MlScore | null
+  onOpenMlPanel: (item: TargetOperasiItem) => void
   // Checkbox props
   selected: boolean
   onToggleSelect: (id: string) => void
+}
+
+export type MlScore = {
+  pelanggan_id: string
+  id_pelanggan: string
+  risk_score: number | null
+  rf_score?: number | null
+  anomaly_score?: number | null
+  top_reason?: string | null
+  is_anomaly?: boolean
 }
 
 const TIPE_INFO = {
@@ -101,12 +119,21 @@ const STATUS_INFO = {
   },
 } as const
 
+const HASIL_LABEL = {
+  BELUM_DIPERIKSA: "Belum diperiksa",
+  NORMAL: "Normal",
+  PELANGGARAN: "Pelanggaran",
+  TIDAK_DITEMUKAN: "Tidak ditemukan",
+} as const
+
 export function TargetOperasiRow({
   item,
   index,
   canEdit,
   isAdmin,
   onChange,
+  mlScore,
+  onOpenMlPanel,
   selected,
   onToggleSelect,
 }: RowProps) {
@@ -115,6 +142,11 @@ export function TargetOperasiRow({
   const [showEdit, setShowEdit] = useState(false)
   const [editStatus, setEditStatus] = useState(item.status)
   const [editCatatan, setEditCatatan] = useState(item.catatan ?? "")
+  const [editHasil, setEditHasil] = useState(item.hasilOperasi?.hasil ?? "BELUM_DIPERIKSA")
+  const [editTanggalOperasi, setEditTanggalOperasi] = useState(
+    item.hasilOperasi?.tanggalOperasi?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
+  )
+  const [editKategoriTemuan, setEditKategoriTemuan] = useState(item.hasilOperasi?.kategoriTemuan ?? "")
 
   const tipeInfo = TIPE_INFO[item.tipeAnomali]
   const statusInfo = STATUS_INFO[item.status]
@@ -160,6 +192,16 @@ export function TargetOperasiRow({
         body: JSON.stringify({
           status: editStatus,
           catatan: editCatatan.trim() || null,
+          ...(editStatus === "SELESAI"
+            ? {
+                hasilOperasi: {
+                  hasil: editHasil,
+                  tanggalOperasi: editTanggalOperasi || null,
+                  kategoriTemuan: editKategoriTemuan.trim() || null,
+                  catatan: editCatatan.trim() || null,
+                },
+              }
+            : {}),
         }),
       })
       if (!res.ok) {
@@ -235,9 +277,15 @@ export function TargetOperasiRow({
         </td>
         <td className="px-3 py-3 text-sm">
           <div className="font-medium">
-            {item.pelanggan.nama || (
-              <span className="italic text-muted-foreground">(belum diisi)</span>
-            )}
+            <button
+              type="button"
+              onClick={() => onOpenMlPanel(item)}
+              className="text-left hover:text-blue-600 hover:underline"
+            >
+              {item.pelanggan.nama || (
+                <span className="italic text-muted-foreground">(belum diisi)</span>
+              )}
+            </button>
           </div>
           <div className="text-xs text-muted-foreground truncate max-w-[200px]">
             {item.pelanggan.lokasi || "—"}
@@ -264,6 +312,9 @@ export function TargetOperasiRow({
             {skorPercent}%
           </span>
         </td>
+        <td className="px-3 py-3 text-center">
+          <RiskScoreBadge score={mlScore?.risk_score} onClick={() => onOpenMlPanel(item)} />
+        </td>
         <td className="px-3 py-3 text-center text-xs text-muted-foreground">
           {item.periode}
         </td>
@@ -274,6 +325,11 @@ export function TargetOperasiRow({
           >
             {statusInfo.label}
           </span>
+          {item.hasilOperasi?.hasil && item.hasilOperasi.hasil !== "BELUM_DIPERIKSA" && (
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              {HASIL_LABEL[item.hasilOperasi.hasil]}
+            </div>
+          )}
         </td>
         <td className="px-3 py-3">
           <div className="flex items-center justify-center gap-1">
@@ -293,9 +349,12 @@ export function TargetOperasiRow({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => updateStatus("SELESAI")}
+                onClick={() => {
+                  setEditStatus("SELESAI")
+                  setShowEdit(true)
+                }}
                 disabled={isUpdating}
-                title="Tandai selesai"
+                title="Input hasil operasi"
                 data-testid={`btn-done-${item.id}`}
               >
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
@@ -371,6 +430,51 @@ export function TargetOperasiRow({
               />
             </div>
 
+            {editStatus === "SELESAI" && (
+              <div className="space-y-4 rounded-md border p-3">
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">
+                    Hasil Operasi <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editHasil}
+                    onChange={(e) => setEditHasil(e.target.value as typeof editHasil)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  >
+                    <option value="BELUM_DIPERIKSA">Belum diperiksa</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="PELANGGARAN">Pelanggaran</option>
+                    <option value="TIDAK_DITEMUKAN">Tidak ditemukan</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">
+                    Tanggal Operasi
+                  </label>
+                  <input
+                    type="date"
+                    value={editTanggalOperasi}
+                    onChange={(e) => setEditTanggalOperasi(e.target.value)}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">
+                    Kategori Temuan
+                  </label>
+                  <input
+                    type="text"
+                    value={editKategoriTemuan}
+                    onChange={(e) => setEditKategoriTemuan(e.target.value)}
+                    placeholder="Contoh: P2TL, Meter rusak, Pelanggaran P3"
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="bg-slate-50 dark:bg-slate-800/50 rounded-md p-3 text-sm">
               <p className="font-medium text-xs text-muted-foreground mb-1">
                 Alasan deteksi:
@@ -434,5 +538,46 @@ export function TargetOperasiRow({
         </AlertDialogContent>
       </AlertDialog>
     </>
+  )
+}
+
+function RiskScoreBadge({
+  score,
+  onClick,
+}: {
+  score: number | null | undefined
+  onClick: () => void
+}) {
+  if (score === null || score === undefined) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+      >
+        Tidak tersedia
+      </button>
+    )
+  }
+
+  const rounded = Math.round(score)
+  const className =
+    rounded >= 70
+      ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+      : rounded >= 40
+        ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+        : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+  const label = rounded >= 70 ? "Tinggi" : rounded >= 40 ? "Menengah" : "Rendah"
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${className}`}
+      title="Klik untuk melihat detail skor NALAR"
+    >
+      {rounded}
+      <span className="font-medium">{label}</span>
+    </button>
   )
 }

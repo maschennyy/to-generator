@@ -36,6 +36,13 @@ enum TipeAnomali {
   POLA_TIDAK_WAJAR
 }
 
+enum HasilOperasiStatus {
+  BELUM_DIPERIKSA
+  NORMAL
+  PELANGGARAN
+  TIDAK_DITEMUKAN
+}
+
 // ============================================
 // MODELS
 // ============================================
@@ -56,6 +63,7 @@ model User {
   targetOperasi TargetOperasi[] @relation("CreatedBy")
   logAktivitas  LogAktivitas[]
   importJobs    ImportJob[]
+  hasilOperasi  HasilOperasi[] @relation("HasilOperasiPetugas")
 
   @@map("users")
 }
@@ -74,6 +82,7 @@ model Pelanggan {
 
   pemakaian     Pemakaian[]
   targetOperasi TargetOperasi[]
+  hasilOperasi  HasilOperasi[]
 
   // Index untuk filter dashboard: pelanggan tidak lengkap
   @@index([dataLengkap])
@@ -120,6 +129,7 @@ model TargetOperasi {
 
   pelanggan Pelanggan @relation(fields: [pelangganId], references: [id], onDelete: Cascade)
   createdBy User      @relation("CreatedBy", fields: [createdById], references: [id])
+  hasilOperasi HasilOperasi?
 
   // Index untuk filter status (paling sering dipakai di tabel TO)
   @@index([status])
@@ -135,6 +145,29 @@ model TargetOperasi {
   @@index([status, tipeAnomali])
 
   @@map("target_operasi")
+}
+
+model HasilOperasi {
+  id              String             @id @default(cuid())
+  targetOperasiId String             @unique
+  pelangganId     String
+  hasil           HasilOperasiStatus @default(BELUM_DIPERIKSA)
+  tanggalOperasi  DateTime?
+  kategoriTemuan  String?
+  catatan         String?
+  petugasId       String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  targetOperasi TargetOperasi @relation(fields: [targetOperasiId], references: [id], onDelete: Cascade)
+  pelanggan     Pelanggan     @relation(fields: [pelangganId], references: [id], onDelete: Cascade)
+  petugas       User?         @relation("HasilOperasiPetugas", fields: [petugasId], references: [id])
+
+  @@index([hasil])
+  @@index([tanggalOperasi])
+  @@index([pelangganId])
+
+  @@map("hasil_operasi")
 }
 
 model Temuan {

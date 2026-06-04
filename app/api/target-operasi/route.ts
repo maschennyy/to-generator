@@ -3,6 +3,15 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { detectAnomaly, getPeriode } from "@/lib/anomali/detector"
 
+type HasilOperasiRow = {
+  targetOperasiId: string
+  hasil: "BELUM_DIPERIKSA" | "NORMAL" | "PELANGGARAN" | "TIDAK_DITEMUKAN"
+  tanggalOperasi: Date | null
+  kategoriTemuan: string | null
+  catatan: string | null
+}
+type TableCheckRow = { exists: boolean }
+
 // GET /api/target-operasi — tidak berubah, tetap sama
 export async function GET(request: NextRequest) {
   try {
@@ -67,8 +76,38 @@ export async function GET(request: NextRequest) {
       counts[c.status] = c._count._all
     }
 
+    const targetIds = rows.map((row) => row.id)
+    const hasilTableRows = await prisma.$queryRaw<TableCheckRow[]>`
+      SELECT to_regclass('public.hasil_operasi') IS NOT NULL AS "exists"
+    `
+    const hasHasilTable = hasilTableRows[0]?.exists ?? false
+    const hasilRows = hasHasilTable && targetIds.length > 0
+      ? await prisma.$queryRaw<HasilOperasiRow[]>`
+          SELECT
+            "targetOperasiId",
+            "hasil",
+            "tanggalOperasi",
+            "kategoriTemuan",
+            "catatan"
+          FROM "hasil_operasi"
+          WHERE "targetOperasiId" = ANY(${targetIds})
+        `
+      : []
+    const hasilByTargetId = new Map(
+      hasilRows.map((row) => [row.targetOperasiId, {
+        hasil: row.hasil,
+        tanggalOperasi: row.tanggalOperasi,
+        kategoriTemuan: row.kategoriTemuan,
+        catatan: row.catatan,
+      }])
+    )
+    const data = rows.map((row) => ({
+      ...row,
+      hasilOperasi: hasilByTargetId.get(row.id) ?? null,
+    }))
+
     return NextResponse.json({
-      data: rows,
+      data,
       pagination: {
         total,
         page,

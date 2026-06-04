@@ -385,7 +385,7 @@ async function processPemakaian(
   await prisma.logAktivitas.create({
     data: {
       userId,
-      aksi: "BULK_IMPORT_PELANGGAN",
+      aksi: "BULK_IMPORT_PEMAKAIAN",
       detail: `Background import pemakaian: ${created} baru, ${updated} update, ${errors} error`,
     },
   })

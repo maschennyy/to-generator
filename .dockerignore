@@ -1,0 +1,12 @@
+.git
+.next
+node_modules
+ml-service/__pycache__
+ml-service/.venv
+ml-service/models
+.env
+.env.*
+!.env.example
+npm-debug.log
+Dockerfile
+docker-compose.override.yml

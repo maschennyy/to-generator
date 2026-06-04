@@ -141,6 +141,11 @@ export function ImportToHistorisForm() {
         description: `${result.created} data, ${result.pelangganUpdated} pelanggan di-flag`,
       })
 
+      void fetch("/api/nalar/train", { method: "POST" }).catch((error) => {
+        console.error("Background NALAR retrain failed:", error)
+      })
+      toast.info("NALAR akan diperbarui dengan data temuan terbaru")
+
       router.push("/master-data/to-historis")
       router.refresh()
     } catch (error) {

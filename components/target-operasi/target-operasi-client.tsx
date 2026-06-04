@@ -17,6 +17,8 @@ import {
   RefreshCw,
   FileSpreadsheet,
   CheckSquare,
+  Brain,
+  ServerCrash,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -33,7 +35,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { TargetOperasiRow, type TargetOperasiItem } from "./target-operasi-row"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { TargetOperasiRow, type MlScore, type TargetOperasiItem } from "./target-operasi-row"
 
 interface Stats {
   total: number
@@ -48,6 +57,36 @@ interface Stats {
 interface Props {
   canGenerate: boolean
   isAdmin: boolean
+}
+
+type MlScoresResponse = {
+  data?: MlScore[]
+  model_version?: number
+}
+
+type PelangganDetail = {
+  pemakaian: Array<{ bulan: number; tahun: number; kwh: number; label: string }>
+}
+
+type MlDetail = MlScore & {
+  top_factors?: Array<{
+    feature: string
+    label: string
+    value: number | null
+    baseline: number | null
+    importance: number
+    contribution: number
+    reason: string
+  }>
+  features?: {
+    rata_kwh_3bln?: number | null
+    rata_kwh_6bln?: number | null
+    rata_kwh_12bln?: number | null
+    tren_kwh?: number | null
+    volatilitas_kwh?: number | null
+    penurunan_tiba2?: number | null
+    bulan_data?: number | null
+  }
 }
 
 const TIPE_OPTIONS = [
@@ -89,6 +128,12 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   const [isGenerating, setIsGenerating] = useState(false)
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [mlScores, setMlScores] = useState<Map<string, MlScore>>(new Map())
+  const [mlUnavailable, setMlUnavailable] = useState("")
+  const [selectedMlItem, setSelectedMlItem] = useState<TargetOperasiItem | null>(null)
+  const [selectedMlDetail, setSelectedMlDetail] = useState<MlDetail | null>(null)
+  const [selectedPelangganDetail, setSelectedPelangganDetail] = useState<PelangganDetail | null>(null)
+  const [isMlDetailLoading, setIsMlDetailLoading] = useState(false)
 
   // ── Bulk selection state ────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -132,6 +177,28 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const fetchMlScores = useCallback(async () => {
+    try {
+      const res = await fetch("/api/nalar/scores")
+      const result = (await res.json()) as MlScoresResponse & { detail?: string; error?: string }
+      if (!res.ok) throw new Error(result.detail || result.error || "Skor NALAR tidak tersedia")
+
+      const next = new Map<string, MlScore>()
+      for (const item of result.data ?? []) {
+        next.set(item.id_pelanggan, item)
+      }
+      setMlScores(next)
+      setMlUnavailable("")
+    } catch (err) {
+      setMlScores(new Map())
+      setMlUnavailable(err instanceof Error ? err.message : "Skor NALAR tidak tersedia")
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchMlScores()
+  }, [fetchMlScores])
 
   // Reset selection saat data berubah (filter/page)
   useEffect(() => {
@@ -271,6 +338,35 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     setPage(1)
   }
 
+  async function openMlPanel(item: TargetOperasiItem) {
+    setSelectedMlItem(item)
+    setSelectedMlDetail(null)
+    setSelectedPelangganDetail(null)
+    setIsMlDetailLoading(true)
+    try {
+      const [scoreRes, detailRes] = await Promise.all([
+        fetch(`/api/nalar/scores/${encodeURIComponent(item.pelanggan.idPelanggan)}`),
+        fetch(`/api/pelanggan/${item.pelanggan.id}/detail`),
+      ])
+
+      const score = await scoreRes.json()
+      if (!scoreRes.ok) throw new Error(score.detail || score.error || "Skor NALAR tidak tersedia")
+      const detail = await detailRes.json()
+      if (!detailRes.ok) throw new Error(detail.error || "Data pelanggan tidak tersedia")
+
+      setSelectedMlDetail(score)
+      setSelectedPelangganDetail(detail)
+    } catch (err) {
+      const fallback = mlScores.get(item.pelanggan.idPelanggan) ?? null
+      setSelectedMlDetail(fallback)
+      toast.error("Detail NALAR tidak lengkap", {
+        description: err instanceof Error ? err.message : "Skor NALAR tidak tersedia",
+      })
+    } finally {
+      setIsMlDetailLoading(false)
+    }
+  }
+
   const hasActiveFilters = search || filterStatus || filterTipe
 
   return (
@@ -282,6 +378,13 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
         <StatCard label="Diproses" value={stats?.counts.DIPROSES ?? 0} icon={Activity} color="purple" testid="stat-diproses" />
         <StatCard label="Selesai" value={stats?.counts.SELESAI ?? 0} icon={CheckCircle2} color="green" testid="stat-selesai" />
       </div>
+
+      {mlUnavailable && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          <ServerCrash className="h-4 w-4 shrink-0" />
+          <span>Skor NALAR tidak tersedia. Tampilan Target Operasi tetap dapat digunakan seperti biasa.</span>
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -439,6 +542,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                   <th className="px-3 py-3 text-left text-xs font-semibold">Tipe Anomali</th>
                   <th className="px-3 py-3 text-left text-xs font-semibold">Alasan</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold">Skor</th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold">Skor NALAR</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold">Periode</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold">Status</th>
                   <th className="px-3 py-3 text-center text-xs font-semibold w-32">Aksi</th>
@@ -453,6 +557,8 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                     canEdit={canGenerate}
                     isAdmin={isAdmin}
                     onChange={fetchData}
+                    mlScore={mlScores.get(item.pelanggan.idPelanggan)}
+                    onOpenMlPanel={openMlPanel}
                     selected={selectedIds.has(item.id)}
                     onToggleSelect={toggleSelect}
                   />
@@ -582,6 +688,237 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <MlRiskSheet
+        item={selectedMlItem}
+        score={selectedMlDetail}
+        detail={selectedPelangganDetail}
+        isLoading={isMlDetailLoading}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedMlItem(null)
+            setSelectedMlDetail(null)
+            setSelectedPelangganDetail(null)
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+function MlRiskSheet({
+  item,
+  score,
+  detail,
+  isLoading,
+  onOpenChange,
+}: {
+  item: TargetOperasiItem | null
+  score: MlDetail | null
+  detail: PelangganDetail | null
+  isLoading: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const risk = score?.risk_score ?? null
+  const roundedRisk = risk === null ? null : Math.round(risk)
+  const chartData = buildTrendChart(detail, score)
+
+  return (
+    <Sheet open={!!item} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-blue-600" />
+            Detail Risiko NALAR
+          </SheetTitle>
+          <SheetDescription>
+            {item?.pelanggan.idPelanggan} · {item?.pelanggan.nama || "Nama belum diisi"}
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="px-4 pb-5 space-y-5">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Memuat skor NALAR...
+            </div>
+          ) : !score ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+              Skor NALAR tidak tersedia.
+            </div>
+          ) : (
+            <>
+              <div>
+                <div className="flex items-end justify-between mb-2">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Risk score</p>
+                    <p className="text-4xl font-bold">{roundedRisk ?? "-"}<span className="text-base text-muted-foreground">/100</span></p>
+                  </div>
+                  <RiskLevelText score={risk} />
+                </div>
+                <div className="h-3 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${riskBarColor(risk)}`}
+                    style={{ width: `${Math.max(0, Math.min(100, roundedRisk ?? 0))}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-xs font-medium text-muted-foreground mb-1">Top reason</p>
+                <p className="text-sm font-medium">{humanizeReason(score)}</p>
+                {score.top_factors && score.top_factors.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {score.top_factors.map((factor) => (
+                      <div key={factor.feature} className="rounded-md bg-slate-50 p-3 text-xs dark:bg-slate-900">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{factor.label}</span>
+                          <span className="text-muted-foreground">
+                            kontribusi {Math.round(factor.contribution * 100)}%
+                          </span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">{factor.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <MiniStat label="Random Forest" value={formatPercent(score.rf_score)} />
+                <MiniStat label="Anomali" value={formatPercent(score.anomaly_score)} />
+              </div>
+
+              <div className="rounded-lg border p-4">
+                <p className="text-sm font-semibold mb-3">Tren kWh vs peer group</p>
+                {chartData.length > 1 ? (
+                  <MiniLineChart data={chartData} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">Data pemakaian belum cukup untuk chart.</p>
+                )}
+                <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+                  <span><span className="inline-block h-2 w-2 rounded-full bg-blue-600 mr-1" />Pelanggan</span>
+                  <span><span className="inline-block h-2 w-2 rounded-full bg-slate-400 mr-1" />Peer baseline</span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function RiskLevelText({ score }: { score: number | null }) {
+  const rounded = score === null ? null : Math.round(score)
+  const text = rounded === null ? "Tidak tersedia" : rounded >= 70 ? "Risiko Tinggi" : rounded >= 40 ? "Risiko Menengah" : "Risiko Rendah"
+  const className =
+    rounded === null
+      ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+      : rounded >= 70
+        ? "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300"
+        : rounded >= 40
+          ? "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+
+  return <span className={`rounded-md px-2 py-1 text-xs font-semibold ${className}`}>{text}</span>
+}
+
+function riskBarColor(score: number | null) {
+  if (score === null) return "bg-slate-400"
+  if (score >= 70) return "bg-red-600"
+  if (score >= 40) return "bg-amber-500"
+  return "bg-slate-500"
+}
+
+function humanizeReason(score: MlDetail) {
+  if (score.top_factors?.[0]?.reason) {
+    return score.top_factors[0].reason
+  }
+  const features = score.features ?? {}
+  if (features.penurunan_tiba2 === 1) {
+    return "Terdapat penurunan kWh tiba-tiba lebih dari 30% dibanding bulan sebelumnya."
+  }
+  if (score.top_reason?.toLowerCase().includes("tren")) {
+    const tren = features.tren_kwh
+    if (typeof tren === "number") {
+      const direction = tren < 0 ? "turun" : "naik"
+      return `Rata-rata kWh 3 bulan terakhir ${direction} sekitar ${Math.abs(Math.round(tren)).toLocaleString("id-ID")} kWh dibanding 3 bulan sebelumnya.`
+    }
+  }
+  if (score.top_reason?.toLowerCase().includes("stabil") || score.top_reason?.toLowerCase().includes("volatil")) {
+    return "Pola pemakaian kWh terlihat tidak stabil dibanding pola pelanggan lain."
+  }
+  if (features.bulan_data !== undefined && Number(features.bulan_data) < 6) {
+    return "Data bulan pemakaian masih terbatas, sehingga perlu pemeriksaan manual tambahan."
+  }
+  return score.top_reason || "Model menemukan pola kWh yang perlu ditinjau lebih lanjut."
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return "-"
+  return `${Math.round(value)}%`
+}
+
+function buildTrendChart(detail: PelangganDetail | null, score: MlDetail | null) {
+  const rows = (detail?.pemakaian ?? []).slice(-12)
+  if (rows.length === 0) return []
+  const peer =
+    score?.features?.rata_kwh_12bln ??
+    score?.features?.rata_kwh_6bln ??
+    score?.features?.rata_kwh_3bln ??
+    0
+
+  return rows.map((row) => ({
+    label: row.label,
+    kwh: row.kwh,
+    peer: Number(peer) || 0,
+  }))
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold">{value}</p>
+    </div>
+  )
+}
+
+function MiniLineChart({ data }: { data: Array<{ label: string; kwh: number; peer: number }> }) {
+  const width = 480
+  const height = 180
+  const padding = 24
+  const values = data.flatMap((d) => [d.kwh, d.peer])
+  const min = Math.min(0, ...values)
+  const max = Math.max(1, ...values)
+
+  function x(index: number) {
+    if (data.length === 1) return width / 2
+    return padding + (index / (data.length - 1)) * (width - padding * 2)
+  }
+
+  function y(value: number) {
+    return height - padding - ((value - min) / (max - min)) * (height - padding * 2)
+  }
+
+  const customerPath = data.map((d, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(d.kwh)}`).join(" ")
+  const peerPath = data.map((d, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(d.peer)}`).join(" ")
+
+  return (
+    <div className="w-full overflow-hidden">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full">
+        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} className="stroke-slate-200 dark:stroke-slate-800" />
+        <path d={peerPath} fill="none" strokeWidth="2" className="stroke-slate-400" strokeDasharray="5 5" />
+        <path d={customerPath} fill="none" strokeWidth="3" className="stroke-blue-600" />
+        {data.map((d, i) => (
+          <circle key={d.label} cx={x(i)} cy={y(d.kwh)} r="3" className="fill-blue-600" />
+        ))}
+      </svg>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        <span>{data[0]?.label}</span>
+        <span>{data[data.length - 1]?.label}</span>
+      </div>
     </div>
   )
 }

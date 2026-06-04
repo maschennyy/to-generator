@@ -1,0 +1,3 @@
+# Salin baris ini ke crontab server dengan perintah: crontab -e
+# Jadwal: setiap hari Minggu pukul 02.00 pagi waktu server.
+0 2 * * 0 APP_DIR=/opt/to-generator /opt/to-generator/scripts/train-ml-weekly.sh >> /opt/to-generator/ml-training.log 2>&1
