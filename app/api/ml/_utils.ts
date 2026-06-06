@@ -24,6 +24,15 @@ export async function proxyMlRequest(path: string, init?: RequestInit) {
   }
 
   const token = getMlServiceToken()
+  if (!token) {
+    return NextResponse.json(
+      {
+        error: "Skor NALAR tidak tersedia",
+        detail: "NALAR_SERVICE_TOKEN atau ML_SERVICE_TOKEN belum diatur di aplikasi Next.js.",
+      },
+      { status: 503 }
+    )
+  }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
@@ -35,7 +44,7 @@ export async function proxyMlRequest(path: string, init?: RequestInit) {
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers ?? {}),
-        ...(token ? { "X-ML-Service-Token": token } : {}),
+        "X-ML-Service-Token": token,
       },
       cache: "no-store",
     })

@@ -3,6 +3,9 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
 
+const MAX_JOB_ROWS = 50000
+type ImportJobType = "PELANGGAN" | "PEMAKAIAN" | "TO_HISTORIS"
+
 // POST /api/import-jobs — buat job baru, langsung return jobId, proses di background
 export async function POST(request: NextRequest) {
   try {
@@ -21,8 +24,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Data tidak valid" }, { status: 400 })
     }
 
-    if (!["PELANGGAN", "PEMAKAIAN", "TO_HISTORIS"].includes(type)) {
+    if (!isImportJobType(type)) {
       return NextResponse.json({ error: "Tipe import tidak dikenali" }, { status: 400 })
+    }
+
+    if (data.length > MAX_JOB_ROWS) {
+      return NextResponse.json(
+        {
+          error: `Jumlah data terlalu besar. Maksimal ${MAX_JOB_ROWS.toLocaleString("id-ID")} baris per job.`,
+        },
+        { status: 400 }
+      )
     }
 
     const job = await prisma.importJob.create({
@@ -72,6 +84,9 @@ export async function GET(request: NextRequest) {
       if (!job) {
         return NextResponse.json({ error: "Job tidak ditemukan" }, { status: 404 })
       }
+      if (session.user.role !== "ADMIN" && job.userId !== session.user.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
       return NextResponse.json(job)
     }
 
@@ -111,9 +126,19 @@ type ValidPemakaianRow = {
   kwh: number
 }
 
+type ValidTOHistorisRow = {
+  idPelanggan: string
+  tanggalTemuan: Date | null
+  kategori: string | null
+}
+
+function isImportJobType(value: unknown): value is ImportJobType {
+  return value === "PELANGGAN" || value === "PEMAKAIAN" || value === "TO_HISTORIS"
+}
+
 async function processImportInBackground(
   jobId: string,
-  type: string,
+  type: ImportJobType,
   data: Record<string, unknown>[],
   userId: string
 ) {
@@ -121,6 +146,8 @@ async function processImportInBackground(
     await processPelanggan(jobId, data, userId)
   } else if (type === "PEMAKAIAN") {
     await processPemakaian(jobId, data, userId)
+  } else if (type === "TO_HISTORIS") {
+    await processTOHistoris(jobId, data, userId)
   }
 }
 
@@ -138,12 +165,19 @@ async function processPelanggan(
 
   const BATCH_SIZE = 500
 
-  const allTO = await prisma.tOHistoris.findMany({ select: { idPelanggan: true } })
-  const toSet = new Set(allTO.map((t) => t.idPelanggan))
-
   for (let i = 0; i < data.length; i += BATCH_SIZE) {
     const batch = data.slice(i, i + BATCH_SIZE)
     const validRows: ValidPelangganRow[] = []
+    const batchIds = [
+      ...new Set(batch.map((item) => cleanIdPelanggan(String(item.idPelanggan ?? ""))).filter(Boolean)),
+    ]
+    const toRows = batchIds.length > 0
+      ? await prisma.tOHistoris.findMany({
+          where: { idPelanggan: { in: batchIds } },
+          select: { idPelanggan: true },
+        })
+      : []
+    const toSet = new Set(toRows.map((t) => t.idPelanggan))
 
     for (const item of batch) {
       try {
@@ -241,14 +275,7 @@ async function processPemakaian(
 
   const BATCH_SIZE = 300
 
-  // Preload TO Historis dan semua pelanggan yang ada
-  const [allTO, allPelanggan] = await Promise.all([
-    prisma.tOHistoris.findMany({ select: { idPelanggan: true } }),
-    prisma.pelanggan.findMany({ select: { id: true, idPelanggan: true } }),
-  ])
-
-  const toSet = new Set(allTO.map((t) => t.idPelanggan))
-  const pelangganMap = new Map(allPelanggan.map((p) => [p.idPelanggan, p.id]))
+  const pelangganMap = new Map<string, string>()
 
   for (let i = 0; i < data.length; i += BATCH_SIZE) {
     const batch = data.slice(i, i + BATCH_SIZE)
@@ -261,9 +288,17 @@ async function processPemakaian(
 
         const bulan = parseInt(String(item.bulan ?? "0"))
         const tahun = parseInt(String(item.tahun ?? "0"))
-        const kwh = parseFloat(String(item.kwh ?? "0")) || 0
+        const kwh = Number.parseFloat(String(item.kwh ?? ""))
 
-        if (!bulan || bulan < 1 || bulan > 12 || !tahun || tahun < 2000) {
+        if (
+          !bulan ||
+          bulan < 1 ||
+          bulan > 12 ||
+          !tahun ||
+          tahun < 2000 ||
+          !Number.isFinite(kwh) ||
+          kwh < 0
+        ) {
           errors++; processed++; continue
         }
 
@@ -276,6 +311,23 @@ async function processPemakaian(
     }
 
     if (validRows.length > 0) {
+      const batchIds = [...new Set(validRows.map((row) => row.idPelanggan))]
+      const [existingPelanggan, toHistorisRows] = await Promise.all([
+        prisma.pelanggan.findMany({
+          where: { idPelanggan: { in: batchIds } },
+          select: { id: true, idPelanggan: true },
+        }),
+        prisma.tOHistoris.findMany({
+          where: { idPelanggan: { in: batchIds } },
+          select: { idPelanggan: true },
+        }),
+      ])
+
+      for (const pelanggan of existingPelanggan) {
+        pelangganMap.set(pelanggan.idPelanggan, pelanggan.id)
+      }
+      const toSet = new Set(toHistorisRows.map((t) => t.idPelanggan))
+
       // Auto-create pelanggan yang belum ada
       const missingIds = validRows
         .map((r) => r.idPelanggan)
@@ -389,4 +441,109 @@ async function processPemakaian(
       detail: `Background import pemakaian: ${created} baru, ${updated} update, ${errors} error`,
     },
   })
+}
+
+// TO HISTORIS
+
+async function processTOHistoris(
+  jobId: string,
+  data: Record<string, unknown>[],
+  userId: string
+) {
+  let processed = 0
+  let created = 0
+  let updated = 0
+  let errors = 0
+  let pelangganUpdated = 0
+
+  const BATCH_SIZE = 500
+
+  for (let i = 0; i < data.length; i += BATCH_SIZE) {
+    const batch = data.slice(i, i + BATCH_SIZE)
+    const validRows: ValidTOHistorisRow[] = []
+
+    for (const item of batch) {
+      try {
+        const cleanId = cleanIdPelanggan(String(item.idPelanggan ?? ""))
+        if (!cleanId) { errors++; processed++; continue }
+
+        const tanggalTemuan = parseOptionalDate(item.tanggalTemuan)
+        if (item.tanggalTemuan && !tanggalTemuan) {
+          errors++; processed++; continue
+        }
+
+        validRows.push({
+          idPelanggan: cleanId,
+          tanggalTemuan,
+          kategori: String(item.kategori ?? "").trim() || null,
+        })
+        processed++
+      } catch {
+        errors++
+        processed++
+      }
+    }
+
+    if (validRows.length > 0) {
+      const idPelangganList = [...new Set(validRows.map((row) => row.idPelanggan))]
+      const existingRows = await prisma.tOHistoris.findMany({
+        where: { idPelanggan: { in: idPelangganList } },
+        select: { idPelanggan: true },
+      })
+      const existingSet = new Set(existingRows.map((row) => row.idPelanggan))
+
+      created += validRows.filter((row) => !existingSet.has(row.idPelanggan)).length
+      updated += validRows.filter((row) => existingSet.has(row.idPelanggan)).length
+
+      await prisma.$transaction(
+        validRows.map((row) =>
+          prisma.tOHistoris.upsert({
+            where: { idPelanggan: row.idPelanggan },
+            create: {
+              idPelanggan: row.idPelanggan,
+              tanggalTemuan: row.tanggalTemuan,
+              kategori: row.kategori,
+            },
+            update: {
+              ...(row.tanggalTemuan ? { tanggalTemuan: row.tanggalTemuan } : {}),
+              ...(row.kategori ? { kategori: row.kategori } : {}),
+            },
+          })
+        )
+      )
+
+      const flagged = await prisma.pelanggan.updateMany({
+        where: {
+          idPelanggan: { in: idPelangganList },
+          isToHistory: false,
+        },
+        data: { isToHistory: true },
+      })
+      pelangganUpdated += flagged.count
+    }
+
+    await prisma.importJob.update({
+      where: { id: jobId },
+      data: { processed, created, updated, errors },
+    })
+  }
+
+  await prisma.importJob.update({
+    where: { id: jobId },
+    data: { status: "DONE", processed, created, updated, errors },
+  })
+
+  await prisma.logAktivitas.create({
+    data: {
+      userId,
+      aksi: "BULK_IMPORT_TO_HISTORIS",
+      detail: `Background import TO Historis: ${created} baru, ${updated} update, ${pelangganUpdated} pelanggan di-flag, ${errors} error`,
+    },
+  })
+}
+
+function parseOptionalDate(value: unknown) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(String(value))
+  return Number.isNaN(date.getTime()) ? null : date
 }

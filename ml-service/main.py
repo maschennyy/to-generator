@@ -220,7 +220,14 @@ def _mark_training_started() -> dict:
 
 
 @app.get("/health")
-def health():
+def health(x_ml_service_token: str | None = Header(default=None)):
+    expected_token = (
+        os.getenv("NALAR_SERVICE_TOKEN", "").strip()
+        or os.getenv("ML_SERVICE_TOKEN", "").strip()
+    )
+    if not expected_token or not x_ml_service_token or not hmac.compare_digest(x_ml_service_token, expected_token):
+        return {"status": "ok"}
+
     data = model_service.health()
     data["training_status"] = _sync_training_status(recover_stale=True)
     return data
@@ -253,11 +260,25 @@ def get_training_status(_auth: None = Depends(verify_internal_token)):
 
 
 @app.get("/scores")
-def scores(_auth: None = Depends(verify_internal_token)):
+def scores(
+    page: int = 1,
+    limit: int = 5000,
+    _auth: None = Depends(verify_internal_token),
+):
     try:
+        safe_page = max(1, page)
+        safe_limit = min(max(1, limit), 10000)
+        offset = (safe_page - 1) * safe_limit
+        result = model_service.score_all(limit=safe_limit, offset=offset)
         return {
-            "data": model_service.score_all(),
+            "data": result["data"],
             "model_version": model_service.model_version,
+            "pagination": {
+                "total": result["total"],
+                "page": safe_page,
+                "limit": safe_limit,
+                "totalPages": max(1, (result["total"] + safe_limit - 1) // safe_limit),
+            },
         }
     except MLServiceError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

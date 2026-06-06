@@ -21,7 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const headersList = await headers()
-        const ip = headersList.get("x-forwarded-for") ?? "anonymous"
+        const ip = getClientIp(headersList)
         const { success } = await loginRatelimit.limit(ip)
         if (!success) {
           throw new Error("Terlalu banyak percobaan login. Coba lagi dalam 15 menit.")
@@ -63,3 +63,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
 })
+
+function getClientIp(headersList: Headers) {
+  const forwardedFor = headersList.get("x-forwarded-for")
+  const firstForwardedIp = forwardedFor?.split(",")[0]?.trim()
+  return firstForwardedIp || headersList.get("x-real-ip") || "anonymous"
+}

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { detectAnomaly, getPeriode, type AnomalyHit } from "@/lib/anomali/detector"
+import { parsePaginationParams } from "@/lib/api/request-helpers"
+import type { Prisma, TipeAnomali } from "@prisma/client"
 
 type HasilOperasiRow = {
   targetOperasiId: string
@@ -36,13 +38,11 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status") || ""
     const tipe = searchParams.get("tipe") || ""
     const periode = searchParams.get("periode") || ""
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100)
-    const skip = (page - 1) * limit
+    const { page, limit, skip } = parsePaginationParams(searchParams)
 
-    const where: Record<string, unknown> = {}
-    if (status) where.status = status
-    if (tipe) where.tipeAnomali = tipe
+    const where: Prisma.TargetOperasiWhereInput = {}
+    if (isTargetStatus(status)) where.status = status
+    if (isTipeAnomali(tipe)) where.tipeAnomali = tipe
     if (periode) where.periode = periode
     if (search) {
       where.pelanggan = {
@@ -134,6 +134,14 @@ export async function GET(request: NextRequest) {
     console.error("GET /api/target-operasi error:", error)
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })
   }
+}
+
+function isTargetStatus(value: string): value is "PENDING" | "DIPROSES" | "SELESAI" | "DIBATALKAN" {
+  return ["PENDING", "DIPROSES", "SELESAI", "DIBATALKAN"].includes(value)
+}
+
+function isTipeAnomali(value: string): value is TipeAnomali {
+  return ["TURUN_DRASTIS", "STAGNAN", "NOL_PEMAKAIAN", "LONJAKAN", "POLA_TIDAK_WAJAR"].includes(value)
 }
 
 // POST /api/target-operasi — generate TO sebagai background job

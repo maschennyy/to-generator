@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import type { Prisma } from "@prisma/client"
 import {
   pemakaianSchema,
   getRolling12Months,
   generateMonthRange,
 } from "@/lib/validations/pemakaian"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
+import { parseOptionalPositiveInt, parsePaginationParams } from "@/lib/api/request-helpers"
 
 // GET /api/pemakaian - Format pivot, default rolling 12 bulan termasuk bulan ini
 export async function GET(request: NextRequest) {
@@ -18,16 +20,20 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get("search") || ""
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100)
+    const tarif = searchParams.get("tarif") || ""
+    const status = searchParams.get("status") || ""
+    const kwhFilter = searchParams.get("kwhFilter") || ""
+    const dayaMin = parseOptionalPositiveInt(searchParams.get("dayaMin"))
+    const dayaMax = parseOptionalPositiveInt(searchParams.get("dayaMax"))
+    const sort = searchParams.get("sort") || "createdAt_desc"
+    const { page, limit, skip } = parsePaginationParams(searchParams)
     const isExport = searchParams.get("export") === "true"
-    const skip = (page - 1) * limit
 
     // Parameter rentang bulan opsional
-    const dariBulan = parseInt(searchParams.get("dariBulan") || "0")
-    const dariTahun = parseInt(searchParams.get("dariTahun") || "0")
-    const sampaiBulan = parseInt(searchParams.get("sampaiBulan") || "0")
-    const sampaiTahun = parseInt(searchParams.get("sampaiTahun") || "0")
+    const dariBulan = parseOptionalPositiveInt(searchParams.get("dariBulan"))
+    const dariTahun = parseOptionalPositiveInt(searchParams.get("dariTahun"))
+    const sampaiBulan = parseOptionalPositiveInt(searchParams.get("sampaiBulan"))
+    const sampaiTahun = parseOptionalPositiveInt(searchParams.get("sampaiTahun"))
 
     // Tentukan daftar bulan yang ditampilkan
     let months: { bulan: number; tahun: number }[]
@@ -49,10 +55,13 @@ export async function GET(request: NextRequest) {
       months = getRolling12Months()
     }
 
-    const whereClause: {
-      OR?: Array<{ [key: string]: { contains: string; mode: "insensitive" } }>
-      pemakaian?: { some: object }
-    } = {
+    const monthWhere: Prisma.PemakaianWhereInput = {
+      OR: months.map((m) => ({
+        AND: [{ bulan: m.bulan }, { tahun: m.tahun }],
+      })),
+    }
+
+    const whereClause: Prisma.PelangganWhereInput = {
       pemakaian: { some: {} },
     }
 
@@ -60,22 +69,43 @@ export async function GET(request: NextRequest) {
       whereClause.OR = [
         { idPelanggan: { contains: search, mode: "insensitive" } },
         { nama: { contains: search, mode: "insensitive" } },
+        { lokasi: { contains: search, mode: "insensitive" } },
       ]
     }
+
+    if (tarif) whereClause.tarif = tarif
+    if (dayaMin > 0 || dayaMax > 0) {
+      whereClause.daya = {
+        ...(dayaMin > 0 ? { gte: dayaMin } : {}),
+        ...(dayaMax > 0 ? { lte: dayaMax } : {}),
+      }
+    }
+    if (status === "to_historis") whereClause.isToHistory = true
+    if (status === "belum_lengkap") whereClause.dataLengkap = false
+    if (status === "lengkap") whereClause.dataLengkap = true
+
+    if (kwhFilter === "ada_kwh_rentang") {
+      whereClause.pemakaian = { some: monthWhere }
+    } else if (kwhFilter === "tanpa_kwh_rentang") {
+      whereClause.AND = [
+        ...(Array.isArray(whereClause.AND) ? whereClause.AND : []),
+        { pemakaian: { none: monthWhere } },
+      ]
+    } else if (kwhFilter === "nol_kwh") {
+      whereClause.pemakaian = { some: { ...monthWhere, kwh: 0 } }
+    }
+
+    const orderBy = getPemakaianOrderBy(sort)
 
     const [pelanggan, total] = await Promise.all([
       prisma.pelanggan.findMany({
         where: whereClause,
         skip: isExport ? undefined : skip,
         take: isExport ? undefined : limit,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         include: {
           pemakaian: {
-            where: {
-              OR: months.map((m) => ({
-                AND: [{ bulan: m.bulan }, { tahun: m.tahun }],
-              })),
-            },
+            where: monthWhere,
             orderBy: [{ tahun: "asc" }, { bulan: "asc" }],
           },
         },
@@ -134,6 +164,21 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function getPemakaianOrderBy(sort: string): Prisma.PelangganOrderByWithRelationInput {
+  const sortMap: Record<string, Prisma.PelangganOrderByWithRelationInput> = {
+    createdAt_desc: { createdAt: "desc" },
+    idPelanggan_asc: { idPelanggan: "asc" },
+    idPelanggan_desc: { idPelanggan: "desc" },
+    nama_asc: { nama: "asc" },
+    nama_desc: { nama: "desc" },
+    tarif_asc: { tarif: "asc" },
+    daya_asc: { daya: "asc" },
+    daya_desc: { daya: "desc" },
+  }
+
+  return sortMap[sort] ?? sortMap.createdAt_desc
 }
 
 

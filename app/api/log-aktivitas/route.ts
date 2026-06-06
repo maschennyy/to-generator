@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { parsePaginationParams } from "@/lib/api/request-helpers"
 
 // GET /api/log-aktivitas?page=1&limit=50&search=&aksi=&userId=
 export async function GET(request: NextRequest) {
@@ -14,12 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const page = Math.max(1, parseInt(searchParams.get("page") || "1"))
-    const limit = Math.min(100, parseInt(searchParams.get("limit") || "50"))
+    const { page, limit, skip } = parsePaginationParams(searchParams, { defaultLimit: 50 })
     const search = searchParams.get("search") || ""
     const aksiFilter = searchParams.get("aksi") || ""
     const userIdFilter = searchParams.get("userId") || ""
-    const skip = (page - 1) * limit
 
     type WhereClause = {
       userId?: string

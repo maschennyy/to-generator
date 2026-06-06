@@ -457,15 +457,26 @@ class RiskModelService:
             for feature, importance in importances
         ]
 
-    def score_all(self) -> list[dict[str, Any]]:
+    def score_all(self, limit: int | None = None, offset: int = 0) -> dict[str, Any]:
         self._ensure_trained()
         df = self.load_features()
         if df.empty:
-            return []
+            return {"data": [], "total": 0, "limit": limit or 0, "offset": offset}
 
         scored = self._score_dataframe(df)
         scored = scored.sort_values("risk_score", ascending=False)
-        return [self._row_to_response(row) for _, row in scored.iterrows()]
+        total = int(len(scored))
+        if limit is not None:
+            scored = scored.iloc[offset:offset + limit]
+        elif offset > 0:
+            scored = scored.iloc[offset:]
+
+        return {
+            "data": [self._row_to_response(row) for _, row in scored.iterrows()],
+            "total": total,
+            "limit": limit or total,
+            "offset": offset,
+        }
 
     def score_one(self, pelanggan_id: str) -> dict[str, Any]:
         self._ensure_trained()

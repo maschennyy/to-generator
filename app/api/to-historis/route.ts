@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
+import { parsePaginationParams } from "@/lib/api/request-helpers"
 
 // GET /api/to-historis
 export async function GET(request: NextRequest) {
@@ -13,9 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get("search") || ""
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 100)
-    const skip = (page - 1) * limit
+    const { page, limit, skip } = parsePaginationParams(searchParams)
 
     const where: {
       OR?: Array<{ [key: string]: { contains: string; mode: "insensitive" } }>

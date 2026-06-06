@@ -3,6 +3,7 @@ import * as XLSX from "xlsx"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { cleanIdPelanggan } from "@/lib/validations/master-dil"
+import { validateSpreadsheetFile } from "@/lib/api/request-helpers"
 
 interface ParsedRow {
   row: number
@@ -50,6 +51,8 @@ const MONTH_MAP: Record<string, number> = {
   des: 12,
   desember: 12,
 }
+
+const MAX_IMPORT_ROWS = 50000
 
 function normalizeHeader(value: unknown) {
   return String(value ?? "")
@@ -164,6 +167,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, message: "File tidak ditemukan" }, { status: 400 })
     }
 
+    const fileError = validateSpreadsheetFile(file)
+    if (fileError) {
+      return NextResponse.json({ success: false, message: fileError }, { status: 400 })
+    }
+
     const arrayBuffer = await file.arrayBuffer()
     const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true })
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]
@@ -171,6 +179,16 @@ export async function POST(req: NextRequest) {
 
     if (rows.length < 2) {
       return NextResponse.json({ success: true, data: [] })
+    }
+
+    if (rows.length - 1 > MAX_IMPORT_ROWS) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Jumlah baris terlalu besar. Maksimal ${MAX_IMPORT_ROWS.toLocaleString("id-ID")} baris per import.`,
+        },
+        { status: 400 }
+      )
     }
 
     const headers = rows[0] ?? []
