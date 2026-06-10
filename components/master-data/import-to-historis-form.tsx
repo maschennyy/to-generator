@@ -186,9 +186,9 @@ export function ImportToHistorisForm() {
               Kolom yang Diperlukan:
             </p>
             <ul className="text-sm text-amber-800 dark:text-amber-400 space-y-1 ml-4 list-disc">
-              <li><strong>IDPEL</strong> — ID pelanggan (wajib, bisa dengan atau tanpa &apos;)</li>
-              <li><strong>TANGGAL TEMUAN</strong> — Tanggal ditemukan (opsional)</li>
-              <li><strong>KATEGORI</strong> — Kategori TO (opsional)</li>
+              <li><strong>IDPEL</strong> - ID pelanggan (wajib, bisa dengan atau tanpa &apos;)</li>
+              <li><strong>TANGGAL TEMUAN</strong> - Tanggal ditemukan (opsional)</li>
+              <li><strong>KATEGORI</strong> - Kategori TO (opsional)</li>
             </ul>
             <p className="text-xs text-amber-700 dark:text-amber-500 mt-2">
               💡 Sistem akan otomatis hapus apostrof (&apos;) di depan IDPEL

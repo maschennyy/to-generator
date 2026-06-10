@@ -59,7 +59,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-neutral-600 mt-6">
-          PT PLN (Persero) &nbsp;·&nbsp; {new Date().getFullYear()}
+          PT PLN (Persero) &nbsp;-&nbsp; {new Date().getFullYear()}
         </p>
       </div>
     </div>

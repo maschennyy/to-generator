@@ -288,7 +288,7 @@ export function TargetOperasiRow({
             </button>
           </div>
           <div className="text-xs text-muted-foreground truncate max-w-[200px]">
-            {item.pelanggan.lokasi || "—"}
+            {item.pelanggan.lokasi || "-"}
           </div>
           {item.pelanggan.isToHistory && (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 mt-1">
@@ -395,7 +395,7 @@ export function TargetOperasiRow({
             <DialogTitle>Update Target Operasi</DialogTitle>
             <DialogDescription>
               IDPEL: <span className="font-mono">{item.pelanggan.idPelanggan}</span>{" "}
-              — {item.pelanggan.nama || "(nama kosong)"}
+              - {item.pelanggan.nama || "(nama kosong)"}
             </DialogDescription>
           </DialogHeader>
 
@@ -520,7 +520,7 @@ export function TargetOperasiRow({
             <AlertDialogDescription>
               TO untuk pelanggan{" "}
               <strong className="font-mono">{item.pelanggan.idPelanggan}</strong>{" "}
-              ({item.pelanggan.nama || "—"}) akan dihapus permanen. Tindakan
+              ({item.pelanggan.nama || "-"}) akan dihapus permanen. Tindakan
               ini tidak dapat dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>

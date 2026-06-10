@@ -13,7 +13,15 @@ export async function GET() {
     const now = new Date()
     const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1)
 
-    const [toPerBulan, toPerTipe] = await Promise.all([
+    const [
+      toPerBulan,
+      toPerTipe,
+      statusCounts,
+      highRisk,
+      mediumRisk,
+      lowRisk,
+      hasilTableRows,
+    ] = await Promise.all([
       // Tren TO per bulan — groupBy createdAt
       prisma.targetOperasi.findMany({
         where: { createdAt: { gte: twelveMonthsAgo } },
@@ -26,6 +34,16 @@ export async function GET() {
         _count: { _all: true },
         orderBy: { _count: { tipeAnomali: "desc" } },
       }),
+      prisma.targetOperasi.groupBy({
+        by: ["status"],
+        _count: { _all: true },
+      }),
+      prisma.targetOperasi.count({ where: { skor: { gte: 70 } } }),
+      prisma.targetOperasi.count({ where: { skor: { gte: 40, lt: 70 } } }),
+      prisma.targetOperasi.count({ where: { skor: { lt: 40 } } }),
+      prisma.$queryRaw<Array<{ exists: boolean }>>`
+        SELECT to_regclass('public.hasil_operasi') IS NOT NULL AS "exists"
+      `,
     ])
 
     // Bangun data tren per bulan
@@ -73,7 +91,48 @@ export async function GET() {
       total: row._count._all,
     }))
 
-    return NextResponse.json({ trendData, tipeData })
+    const statusMap = new Map(statusCounts.map((row) => [row.status, row._count._all]))
+    const totalCreated = Array.from(statusMap.values()).reduce((sum, total) => sum + total, 0)
+    const diproses = statusMap.get("DIPROSES") ?? 0
+    const selesai = statusMap.get("SELESAI") ?? 0
+    const dibatalkan = statusMap.get("DIBATALKAN") ?? 0
+    const pending = statusMap.get("PENDING") ?? 0
+    const hasHasilTable = hasilTableRows[0]?.exists ?? false
+    const hasilRows = hasHasilTable
+      ? await prisma.hasilOperasi.groupBy({
+          by: ["hasil"],
+          _count: { _all: true },
+        })
+      : []
+    const hasilMap = new Map(hasilRows.map((row) => [row.hasil, row._count._all]))
+    const checked = (hasilMap.get("NORMAL") ?? 0)
+      + (hasilMap.get("PELANGGARAN") ?? 0)
+      + (hasilMap.get("TIDAK_DITEMUKAN") ?? 0)
+    const violations = hasilMap.get("PELANGGARAN") ?? 0
+    const hitRate = checked > 0 ? violations / checked : null
+
+    return NextResponse.json({
+      trendData,
+      tipeData,
+      operational: {
+        funnel: [
+          { key: "created", label: "TO Dibuat", total: totalCreated },
+          { key: "pending", label: "Pending", total: pending },
+          { key: "process", label: "Diproses", total: diproses },
+          { key: "done", label: "Selesai", total: selesai },
+          { key: "violation", label: "Terbukti", total: violations },
+        ],
+        status: { pending, diproses, selesai, dibatalkan },
+        hitRate,
+        checked,
+        violations,
+      },
+      riskDistribution: [
+        { band: "high", label: "Risiko Tinggi", range: "70-100", total: highRisk },
+        { band: "medium", label: "Risiko Menengah", range: "40-69", total: mediumRisk },
+        { band: "low", label: "Risiko Rendah", range: "0-39", total: lowRisk },
+      ],
+    })
   } catch (error) {
     console.error("GET /api/dashboard-charts error:", error)
     return NextResponse.json({ error: "Terjadi kesalahan server" }, { status: 500 })

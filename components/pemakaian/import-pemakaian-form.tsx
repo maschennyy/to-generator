@@ -191,11 +191,11 @@ export function ImportPemakaianForm() {
               Format Kolom Excel:
             </p>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 ml-4 list-disc">
-              <li><strong>IDPEL</strong> — ID pelanggan (wajib)</li>
-              <li><strong>TRF</strong> — Golongan tarif</li>
-              <li><strong>DAYA</strong> — Daya dalam VA</li>
-              <li><strong>BLTH REK</strong> — Format &quot;Apr-26&quot; atau &quot;Jan-2025&quot;</li>
-              <li><strong>PEMKWH</strong> — Pemakaian dalam kWh</li>
+              <li><strong>IDPEL</strong> - ID pelanggan (wajib)</li>
+              <li><strong>TRF</strong> - Golongan tarif</li>
+              <li><strong>DAYA</strong> - Daya dalam VA</li>
+              <li><strong>BLTH REK</strong> - Format &quot;Apr-26&quot; atau &quot;Jan-2025&quot;</li>
+              <li><strong>PEMKWH</strong> - Pemakaian dalam kWh</li>
             </ul>
           </div>
           <Button type="button" variant="outline" onClick={downloadTemplate}>
@@ -314,7 +314,7 @@ export function ImportPemakaianForm() {
                       <td className="px-2 py-2 text-xs font-mono">{row.idPelanggan || "-"}</td>
                       <td className="px-2 py-2 text-xs">
                         {row.nama ? row.nama : (
-                          <span className="text-amber-600 italic">⚠️ Auto-create</span>
+                          <span className="text-amber-600 italic">Auto-create</span>
                         )}
                       </td>
                       <td className="px-2 py-2 text-xs">

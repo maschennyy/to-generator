@@ -132,6 +132,28 @@ export async function GET(request: NextRequest) {
         validKwh.length > 0
           ? validKwh.reduce((a, b) => a + b, 0) / validKwh.length
           : 0
+      const zeroMonths = pemakaianArray.filter((p) => p.kwh === 0).length
+      const missingMonths = pemakaianArray.filter((p) => p.kwh === null).length
+      const latestThree = pemakaianArray.slice(-3).filter((p) => p.kwh !== null).map((p) => p.kwh as number)
+      const previousThree = pemakaianArray.slice(-6, -3).filter((p) => p.kwh !== null).map((p) => p.kwh as number)
+      const latestAvg = average(latestThree)
+      const previousAvg = average(previousThree)
+      const trendKwh = latestAvg !== null && previousAvg !== null
+        ? Math.round((latestAvg - previousAvg) * 100) / 100
+        : null
+      const trendPercent = trendKwh !== null && previousAvg && previousAvg > 0
+        ? Math.round((trendKwh / previousAvg) * 100)
+        : null
+      const signal =
+        zeroMonths > 0
+          ? "zero_kwh"
+          : trendPercent !== null && trendPercent <= -30
+            ? "drop"
+            : missingMonths > Math.max(2, Math.floor(months.length / 3))
+              ? "missing"
+              : trendPercent !== null && trendPercent >= 30
+                ? "increase"
+                : "stable"
 
       return {
         id: p.id,
@@ -144,6 +166,13 @@ export async function GET(request: NextRequest) {
         dataLengkap: p.dataLengkap,
         pemakaian: pemakaianArray,
         rataRata: Math.round(rataRata * 100) / 100,
+        signals: {
+          signal,
+          zeroMonths,
+          missingMonths,
+          trendKwh,
+          trendPercent,
+        },
       }
     })
 
@@ -164,6 +193,11 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
 function getPemakaianOrderBy(sort: string): Prisma.PelangganOrderByWithRelationInput {

@@ -260,7 +260,7 @@ export function LaporanClient({ userName }: Props) {
       doc.text("Laporan Target Operasi", marginX, 12)
       doc.setFont("helvetica", "normal")
       doc.setFontSize(10)
-      doc.text("Sistem TO Generator — PLN ICON+", marginX, 19)
+      doc.text("Sistem TO Generator - PLN ICON+", marginX, 19)
 
       // Meta box
       doc.setTextColor(15, 23, 42)
@@ -270,7 +270,7 @@ export function LaporanClient({ userName }: Props) {
         day: "2-digit",
         month: "short",
         year: "numeric",
-      })} — ${new Date(data.range.to).toLocaleDateString("id-ID", {
+      })} - ${new Date(data.range.to).toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "short",
         year: "numeric",
@@ -285,7 +285,7 @@ export function LaporanClient({ userName }: Props) {
       doc.text("Dicetak oleh:", marginX, y)
       doc.setFont("helvetica", "normal")
       doc.text(
-        `${userName} — ${new Date().toLocaleString("id-ID")}`,
+        `${userName} - ${new Date().toLocaleString("id-ID")}`,
         marginX + 38,
         y
       )

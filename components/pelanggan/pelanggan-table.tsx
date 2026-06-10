@@ -392,7 +392,7 @@ export function PelangganTable({ isAdmin }: PelangganTableProps) {
                         <span className="font-medium">{item.nama}</span>
                       ) : (
                         <span className="italic text-amber-600 dark:text-amber-400">
-                          ⚠️ Belum diisi
+                          Belum diisi
                         </span>
                       )}
                     </td>
@@ -401,7 +401,7 @@ export function PelangganTable({ isAdmin }: PelangganTableProps) {
                         item.lokasi
                       ) : (
                         <span className="italic text-amber-600 dark:text-amber-400">
-                          ⚠️ Belum diisi
+                          Belum diisi
                         </span>
                       )}
                     </td>
@@ -427,7 +427,7 @@ export function PelangganTable({ isAdmin }: PelangganTableProps) {
                         )}
                         {item.dataLengkap && !item.isToHistory && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
-                            ✓ OK
+                            OK
                           </span>
                         )}
                       </div>
@@ -484,7 +484,7 @@ export function PelangganTable({ isAdmin }: PelangganTableProps) {
           <AlertDialogHeader>
                         <AlertDialogTitle>
               {deleteMode === "all"
-                ? "⚠️ Hapus SEMUA Pelanggan?"
+                ? "Hapus SEMUA Pelanggan?"
                 : `Hapus ${selectedIds.size} Pelanggan?`}
             </AlertDialogTitle>
             <AlertDialogDescription>

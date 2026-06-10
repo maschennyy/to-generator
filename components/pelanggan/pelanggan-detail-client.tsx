@@ -201,7 +201,7 @@ export function PelangganDetailClient({ id, isAdmin }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <InfoCard icon={Tag} label="Tarif" value={pelanggan.tarif} />
         <InfoCard icon={Zap} label="Daya" value={`${pelanggan.daya.toLocaleString("id-ID")} VA`} />
-        <InfoCard icon={MapPin} label="Lokasi" value={pelanggan.lokasi || "—"} truncate />
+        <InfoCard icon={MapPin} label="Lokasi" value={pelanggan.lokasi || "-"} truncate />
         <InfoCard
           icon={Calendar}
           label="Terdaftar"
@@ -326,7 +326,7 @@ export function PelangganDetailClient({ id, isAdmin }: Props) {
                       }`}>
                         {p.kwh.toLocaleString("id-ID")}
                       </td>
-                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.keterangan || "—"}</td>
+                      <td className="px-4 py-2 text-xs text-muted-foreground">{p.keterangan || "-"}</td>
                     </tr>
                   ))}
                 </tbody>

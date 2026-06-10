@@ -150,7 +150,7 @@ export function NotificationBell({ isAdmin }: Props) {
                         <span className="font-medium text-slate-500 dark:text-slate-400">
                           {log.user.nama}
                         </span>
-                        · {timeAgo(log.createdAt)}
+                        - {timeAgo(log.createdAt)}
                       </p>
                     </div>
                   </div>

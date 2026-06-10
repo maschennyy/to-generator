@@ -40,6 +40,10 @@ export async function GET(request: NextRequest) {
     const filterStatus = searchParams.get("status") ?? "";
     const filterTipe = searchParams.get("tipe") ?? "";
     const filterPeriode = searchParams.get("periode") ?? "";
+    const riskBand = searchParams.get("riskBand") ?? "";
+    const skorMin = parseScore(searchParams.get("skorMin"));
+    const skorMax = parseScore(searchParams.get("skorMax"));
+    const sort = searchParams.get("sort") ?? "skor_desc";
 
     const where: Prisma.TargetOperasiWhereInput = {};
 
@@ -50,6 +54,8 @@ export async function GET(request: NextRequest) {
       where.tipeAnomali = filterTipe as TipeAnomali;
     }
     if (filterPeriode) where.periode = filterPeriode;
+    const scoreFilter = buildScoreFilter(riskBand, skorMin, skorMax);
+    if (scoreFilter) where.skor = scoreFilter;
 
     if (search) {
       where.pelanggan = {
@@ -64,7 +70,7 @@ export async function GET(request: NextRequest) {
     // Biarkan TypeScript infer tipe allData (termasuk pelanggan dari include)
     const allData = await prisma.targetOperasi.findMany({
       where,
-      orderBy: [{ skor: "desc" }, { createdAt: "desc" }],
+      orderBy: getTargetOrderBy(sort),
       include: {
         pelanggan: {
           select: {
@@ -181,4 +187,46 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function parseScore(value: string | null) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : null;
+}
+
+function buildScoreFilter(
+  riskBand: string,
+  skorMin: number | null,
+  skorMax: number | null
+): Prisma.FloatFilter<"TargetOperasi"> | undefined {
+  const filter: Prisma.FloatFilter<"TargetOperasi"> = {};
+
+  if (riskBand === "high") {
+    filter.gte = 70;
+  } else if (riskBand === "medium") {
+    filter.gte = 40;
+    filter.lt = 70;
+  } else if (riskBand === "low") {
+    filter.lt = 40;
+  }
+
+  if (skorMin !== null) filter.gte = Math.max(Number(filter.gte ?? 0), skorMin);
+  if (skorMax !== null) filter.lte = skorMax;
+
+  return Object.keys(filter).length > 0 ? filter : undefined;
+}
+
+function getTargetOrderBy(sort: string): Prisma.TargetOperasiOrderByWithRelationInput[] {
+  const sortMap: Record<string, Prisma.TargetOperasiOrderByWithRelationInput[]> = {
+    skor_desc: [{ skor: "desc" }, { createdAt: "desc" }],
+    skor_asc: [{ skor: "asc" }, { createdAt: "desc" }],
+    terbaru: [{ createdAt: "desc" }],
+    terlama: [{ createdAt: "asc" }],
+    periode_desc: [{ periode: "desc" }, { skor: "desc" }],
+    periode_asc: [{ periode: "asc" }, { skor: "desc" }],
+    status_asc: [{ status: "asc" }, { skor: "desc" }],
+  };
+
+  return sortMap[sort] ?? sortMap.skor_desc;
 }

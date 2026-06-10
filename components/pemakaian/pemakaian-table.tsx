@@ -32,6 +32,13 @@ interface PemakaianData {
   dataLengkap: boolean
   pemakaian: Array<{ bulan: number; tahun: number; kwh: number | null }>
   rataRata: number
+  signals?: {
+    signal: "zero_kwh" | "drop" | "missing" | "increase" | "stable"
+    zeroMonths: number
+    missingMonths: number
+    trendKwh: number | null
+    trendPercent: number | null
+  }
 }
 
 interface Month {
@@ -277,7 +284,7 @@ export function PemakaianTable() {
 
   // Label rentang bulan yang aktif
   const rangeLabel = hasCustomRange
-    ? `${NAMA_BULAN_PENDEK[dariBulan - 1]} ${dariTahun} – ${NAMA_BULAN_PENDEK[sampaiBulan - 1]} ${sampaiTahun}`
+    ? `${NAMA_BULAN_PENDEK[dariBulan - 1]} ${dariTahun} - ${NAMA_BULAN_PENDEK[sampaiBulan - 1]} ${sampaiTahun}`
     : "12 bulan terakhir (otomatis)"
 
   return (
@@ -499,7 +506,7 @@ export function PemakaianTable() {
       {!isLoading && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            {total.toLocaleString("id-ID")} pelanggan · {months.length} bulan ditampilkan
+            {total.toLocaleString("id-ID")} pelanggan - {months.length} bulan ditampilkan
           </p>
           <Button
             type="button"
@@ -525,7 +532,7 @@ export function PemakaianTable() {
           <span className="text-muted-foreground">0 kWh (potensi anomali)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">—</span>
+          <span className="text-muted-foreground">-</span>
           <span className="text-muted-foreground">Data belum diinput</span>
         </div>
       </div>
@@ -566,8 +573,9 @@ export function PemakaianTable() {
                     </th>
                   ))}
                   <th className="px-3 py-3 text-right text-xs font-semibold text-blue-700 dark:text-blue-400 min-w-[100px] bg-blue-50 dark:bg-blue-950/30 whitespace-nowrap">
-                    Rata²
+                    Rata-rata
                   </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold min-w-[170px]">Sinyal</th>
                 </tr>
               </thead>
               <tbody>
@@ -588,7 +596,7 @@ export function PemakaianTable() {
                       </Link>
                     </td>
                     <td className="px-3 py-3 text-sm font-medium">
-                      {item.nama || <span className="text-muted-foreground italic">—</span>}
+                      {item.nama || <span className="text-muted-foreground italic">-</span>}
                       <div className="mt-1 flex flex-wrap gap-1">
                         {item.isToHistory && (
                           <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
@@ -621,6 +629,9 @@ export function PemakaianTable() {
                     <td className="px-3 py-3 text-sm text-right font-semibold bg-blue-50 dark:bg-blue-950/30">
                       {item.rataRata.toLocaleString("id-ID")}
                     </td>
+                    <td className="px-3 py-3 text-sm">
+                      <PemakaianSignal signals={item.signals} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -647,6 +658,58 @@ export function PemakaianTable() {
       )}
     </div>
   )
+}
+
+function PemakaianSignal({ signals }: { signals?: PemakaianData["signals"] }) {
+  if (!signals) {
+    return <span className="text-xs text-muted-foreground">-</span>
+  }
+
+  const meta = getSignalMeta(signals)
+  return (
+    <div className="space-y-1">
+      <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${meta.className}`}>
+        {meta.label}
+      </span>
+      <p className="text-xs text-muted-foreground">{meta.detail}</p>
+    </div>
+  )
+}
+
+function getSignalMeta(signals: NonNullable<PemakaianData["signals"]>) {
+  if (signals.signal === "zero_kwh") {
+    return {
+      label: "0 kWh",
+      detail: `${signals.zeroMonths} bulan bernilai 0`,
+      className: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+    }
+  }
+  if (signals.signal === "drop") {
+    return {
+      label: "Turun drastis",
+      detail: `${signals.trendPercent ?? 0}% vs 3 bulan sebelumnya`,
+      className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+    }
+  }
+  if (signals.signal === "missing") {
+    return {
+      label: "Data kosong",
+      detail: `${signals.missingMonths} bulan belum ada data`,
+      className: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    }
+  }
+  if (signals.signal === "increase") {
+    return {
+      label: "Naik",
+      detail: `+${signals.trendPercent ?? 0}% vs 3 bulan sebelumnya`,
+      className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+    }
+  }
+  return {
+    label: "Stabil",
+    detail: signals.trendPercent === null ? "Histori terbatas" : `${signals.trendPercent}% vs 3 bulan sebelumnya`,
+    className: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
+  }
 }
 
 function SortableLabel({

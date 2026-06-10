@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { LogOut, User, UserCircle, ChevronDown } from "lucide-react"
 import { signOut } from "next-auth/react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 
@@ -20,6 +21,8 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function Topbar({ userName, userRole }: TopbarProps) {
   const isAdmin = userRole === "ADMIN"
+  const pathname = usePathname()
+  const pageMeta = getPageMeta(pathname)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -44,8 +47,11 @@ export function Topbar({ userName, userRole }: TopbarProps) {
 
   return (
     <header className="bg-white dark:bg-black border-b border-slate-200 dark:border-neutral-800 px-6 py-3 sticky top-0 z-20 shadow-sm">
-  <div className="flex items-center justify-between">
-    <div />
+  <div className="flex items-center justify-between gap-4">
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{pageMeta.section}</p>
+      <h2 className="truncate text-sm font-semibold md:text-base">{pageMeta.title}</h2>
+    </div>
     <div className="flex items-center gap-2">
       <NotificationBell isAdmin={isAdmin} />
       <ThemeToggle />
@@ -101,4 +107,29 @@ export function Topbar({ userName, userRole }: TopbarProps) {
   </div>
 </header>
   )
+}
+
+function getPageMeta(pathname: string) {
+  const routes = [
+    { match: "/admin/nalar-dashboard", section: "Admin", title: "NALAR Dashboard" },
+    { match: "/admin/ml-dashboard", section: "Admin", title: "NALAR Dashboard" },
+    { match: "/admin/pengaturan", section: "Admin", title: "Pengaturan Sistem" },
+    { match: "/admin/users", section: "Admin", title: "Manajemen User" },
+    { match: "/admin/log", section: "Admin", title: "Log Aktivitas" },
+    { match: "/master-data/to-historis/import", section: "Master Data", title: "Import TO Historis" },
+    { match: "/master-data/to-historis", section: "Master Data", title: "TO Historis" },
+    { match: "/target-operasi", section: "Operasi", title: "Target Operasi" },
+    { match: "/pemakaian/import", section: "Pemakaian", title: "Import Pemakaian" },
+    { match: "/pemakaian/new", section: "Pemakaian", title: "Input Pemakaian" },
+    { match: "/pemakaian", section: "Pemakaian", title: "Data Pemakaian" },
+    { match: "/pelanggan/import", section: "Pelanggan", title: "Import Pelanggan" },
+    { match: "/pelanggan/new", section: "Pelanggan", title: "Tambah Pelanggan" },
+    { match: "/pelanggan", section: "Pelanggan", title: "Data Pelanggan" },
+    { match: "/laporan", section: "Laporan", title: "Laporan Operasi" },
+    { match: "/profile", section: "Akun", title: "Profil Saya" },
+    { match: "/dashboard", section: "Ringkasan", title: "Dashboard Operasional" },
+  ]
+
+  return routes.find((route) => pathname === route.match || pathname.startsWith(route.match + "/"))
+    ?? { section: "NALAR P2TL", title: "Risk Operation System" }
 }

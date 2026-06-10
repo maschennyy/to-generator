@@ -136,7 +136,7 @@ export function ImportPelangganForm() {
         })),
       }
 
-      // Kirim ke background job API — langsung dapat jobId, tidak perlu tunggu selesai
+      // Kirim ke background job API - langsung dapat jobId, tidak perlu tunggu selesai
       const response = await fetch("/api/import-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,7 +154,7 @@ export function ImportPelangganForm() {
         duration: 5000,
       })
 
-      // Langsung redirect — import terus berjalan di server
+      // Langsung redirect - import terus berjalan di server
       router.push("/pelanggan")
     } catch (error) {
       console.error(error)
@@ -195,14 +195,14 @@ export function ImportPelangganForm() {
               Kolom yang Diperlukan:
             </p>
             <ul className="text-sm text-blue-800 dark:text-blue-400 space-y-1 ml-4 list-disc">
-              <li><strong>IDPEL</strong> — ID unik pelanggan (wajib, hanya angka)</li>
-              <li><strong>NAMA</strong> — Nama pelanggan (wajib)</li>
-              <li><strong>ALAMAT</strong> — Alamat pelanggan (wajib)</li>
-              <li><strong>TARIF</strong> — Golongan tarif (R1, B2, dll)</li>
-              <li><strong>DAYA</strong> — Daya dalam VA</li>
+              <li><strong>IDPEL</strong> - ID unik pelanggan (wajib, hanya angka)</li>
+              <li><strong>NAMA</strong> - Nama pelanggan (wajib)</li>
+              <li><strong>ALAMAT</strong> - Alamat pelanggan (wajib)</li>
+              <li><strong>TARIF</strong> - Golongan tarif (R1, B2, dll)</li>
+              <li><strong>DAYA</strong> - Daya dalam VA</li>
             </ul>
             <p className="text-xs text-blue-700 dark:text-blue-500 mt-2">
-              💡 Import berjalan di latar belakang — kamu bebas navigasi ke halaman lain
+              Import berjalan di latar belakang - kamu bebas navigasi ke halaman lain
             </p>
           </div>
           <Button type="button" variant="outline" onClick={downloadTemplate}>

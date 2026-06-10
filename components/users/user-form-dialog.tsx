@@ -167,9 +167,9 @@ export function UserFormDialog({ open, onClose, onSuccess, mode, user }: Props) 
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USER">User — Hanya lihat & input data</SelectItem>
-                <SelectItem value="SPV">Supervisor — Bisa generate & update TO</SelectItem>
-                <SelectItem value="ADMIN">Admin — Akses penuh</SelectItem>
+                <SelectItem value="USER">User - Hanya lihat & input data</SelectItem>
+                <SelectItem value="SPV">Supervisor - Bisa generate & update TO</SelectItem>
+                <SelectItem value="ADMIN">Admin - Akses penuh</SelectItem>
               </SelectContent>
             </Select>
           </div>

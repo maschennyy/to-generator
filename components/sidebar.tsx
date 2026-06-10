@@ -132,8 +132,8 @@ export function Sidebar({ userRole }: SidebarProps) {
                   N
                 </div>
                 <div className="overflow-hidden">
-                  <h1 className="text-base font-bold dark:text-white whitespace-nowrap">NALAR</h1>
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">Capstone Project 2026</p>
+                  <h1 className="text-base font-bold dark:text-white whitespace-nowrap">NALAR P2TL</h1>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">Risk Operation System</p>
                 </div>
               </div>
               <Button
@@ -187,7 +187,7 @@ export function Sidebar({ userRole }: SidebarProps) {
               <p className="font-medium">
                 Role: <span className="text-neutral-600 dark:text-neutral-400">{userRole}</span>
               </p>
-              <p className="mt-1">v1.0.0 - Dev Build</p>
+              <p className="mt-1">v1.0.0</p>
             </div>
           )}
         </div>

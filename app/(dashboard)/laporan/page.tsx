@@ -19,7 +19,7 @@ export default async function LaporanPage() {
             <h1 className="text-3xl font-bold">Laporan</h1>
           </div>
           <p className="text-muted-foreground mt-1">
-            Ringkasan statistik, tren periode, dan laporan Target Operasi —
+            Ringkasan statistik, tren periode, dan laporan Target Operasi -
             siap diekspor ke PDF
           </p>
         </div>

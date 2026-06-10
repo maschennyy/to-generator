@@ -369,7 +369,7 @@ export function ToHistorisTable({ isAdmin }: ToHistorisTableProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {deleteMode === "all"
-                ? "⚠️ Hapus SEMUA TO Historis?"
+                ? "Hapus SEMUA TO Historis?"
                 : `Hapus ${selectedIds.size} TO Historis?`}
             </AlertDialogTitle>
             <AlertDialogDescription>

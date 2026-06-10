@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { DashboardStats } from "@/components/dashboard/dashboard-stats"
 import { DashboardWarning } from "@/components/dashboard/dashboard-warning"
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts"
+import { DashboardPriority } from "@/components/dashboard/dashboard-priority"
 
 export default async function DashboardPage() {
   const session = await auth()
@@ -22,6 +23,8 @@ export default async function DashboardPage() {
 
       {/* Warning untuk data tidak lengkap */}
       <DashboardWarning />
+
+      <DashboardPriority />
 
       {/* Stats Cards */}
       <DashboardStats />

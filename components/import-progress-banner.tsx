@@ -47,7 +47,7 @@ function getDescription(job: ImportJob): string {
       return `${job.processed.toLocaleString("id-ID")} / ${job.total.toLocaleString("id-ID")} pelanggan dianalisis`
     }
     if (job.status === "DONE") {
-      return `${job.updated.toLocaleString("id-ID")} anomali · ${job.created.toLocaleString("id-ID")} TO dibuat`
+      return `${job.updated.toLocaleString("id-ID")} anomali - ${job.created.toLocaleString("id-ID")} TO dibuat`
     }
   }
   // Import jobs
@@ -55,7 +55,7 @@ function getDescription(job: ImportJob): string {
     return `${job.processed.toLocaleString("id-ID")} / ${job.total.toLocaleString("id-ID")} data`
   }
   if (job.status === "DONE") {
-    return `${job.created.toLocaleString("id-ID")} baru · ${job.updated.toLocaleString("id-ID")} update${job.errors > 0 ? ` · ${job.errors} error` : ""}`
+    return `${job.created.toLocaleString("id-ID")} baru - ${job.updated.toLocaleString("id-ID")} update${job.errors > 0 ? ` - ${job.errors} error` : ""}`
   }
   return "Terjadi kesalahan"
 }

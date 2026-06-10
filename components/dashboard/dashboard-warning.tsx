@@ -71,7 +71,7 @@ export function DashboardWarning() {
           </div>
           <div className="flex-1">
             <p className="font-medium text-green-900 dark:text-green-300">
-              ✓ Semua data pelanggan lengkap
+              Semua data pelanggan lengkap
             </p>
             <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
               Tidak ada warning, sistem siap digunakan
@@ -91,7 +91,7 @@ export function DashboardWarning() {
           </div>
           <div className="flex-1">
             <p className="font-semibold text-amber-900 dark:text-amber-300">
-              ⚠️ Ada data pelanggan yang belum lengkap
+              Ada data pelanggan yang belum lengkap
             </p>
             <p className="text-sm text-amber-700 dark:text-amber-400 mt-1">
               <strong>{data.warnings.pelangganTidakLengkap} pelanggan</strong>{" "}

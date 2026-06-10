@@ -106,6 +106,23 @@ const STATUS_OPTIONS = [
   { value: "DIBATALKAN", label: "Dibatalkan" },
 ]
 
+const RISK_BAND_OPTIONS = [
+  { value: "", label: "Semua Risiko" },
+  { value: "high", label: "Risiko Tinggi (70-100)" },
+  { value: "medium", label: "Risiko Menengah (40-69)" },
+  { value: "low", label: "Risiko Rendah (0-39)" },
+]
+
+const SORT_OPTIONS = [
+  { value: "skor_desc", label: "Skor tertinggi" },
+  { value: "skor_asc", label: "Skor terendah" },
+  { value: "terbaru", label: "Terbaru dibuat" },
+  { value: "terlama", label: "Terlama dibuat" },
+  { value: "periode_desc", label: "Periode terbaru" },
+  { value: "periode_asc", label: "Periode terlama" },
+  { value: "status_asc", label: "Status A-Z" },
+]
+
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pending",
   DIPROSES: "Diproses",
@@ -121,6 +138,10 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   const [searchInput, setSearchInput] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
   const [filterTipe, setFilterTipe] = useState("")
+  const [filterRiskBand, setFilterRiskBand] = useState("")
+  const [skorMin, setSkorMin] = useState("")
+  const [skorMax, setSkorMax] = useState("")
+  const [sort, setSort] = useState("skor_desc")
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -157,6 +178,10 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       })
       if (filterStatus) params.append("status", filterStatus)
       if (filterTipe) params.append("tipe", filterTipe)
+      if (filterRiskBand) params.append("riskBand", filterRiskBand)
+      if (skorMin) params.append("skorMin", skorMin)
+      if (skorMax) params.append("skorMax", skorMax)
+      if (sort) params.append("sort", sort)
 
       const res = await fetch(`/api/target-operasi?${params}`)
       const result = await res.json()
@@ -172,7 +197,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     } finally {
       setIsLoading(false)
     }
-  }, [search, page, filterStatus, filterTipe])
+  }, [search, page, filterStatus, filterTipe, filterRiskBand, skorMin, skorMax, sort])
 
   useEffect(() => {
     fetchData()
@@ -203,7 +228,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
   // Reset selection saat data berubah (filter/page)
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [search, page, filterStatus, filterTipe])
+  }, [search, page, filterStatus, filterTipe, filterRiskBand, skorMin, skorMax, sort])
 
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -297,6 +322,10 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
       if (search) params.set("search", search)
       if (filterStatus) params.set("status", filterStatus)
       if (filterTipe) params.set("tipe", filterTipe)
+      if (filterRiskBand) params.set("riskBand", filterRiskBand)
+      if (skorMin) params.set("skorMin", skorMin)
+      if (skorMax) params.set("skorMax", skorMax)
+      if (sort) params.set("sort", sort)
 
       const response = await fetch(`/api/target-operasi/export?${params}`)
       if (!response.ok) {
@@ -335,6 +364,10 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     setSearch("")
     setFilterStatus("")
     setFilterTipe("")
+    setFilterRiskBand("")
+    setSkorMin("")
+    setSkorMax("")
+    setSort("skor_desc")
     setPage(1)
   }
 
@@ -367,7 +400,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
     }
   }
 
-  const hasActiveFilters = search || filterStatus || filterTipe
+  const hasActiveFilters = search || filterStatus || filterTipe || filterRiskBand || skorMin || skorMax || sort !== "skor_desc"
 
   return (
     <div className="space-y-5">
@@ -450,6 +483,49 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
         >
           {TIPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={filterRiskBand}
+          onChange={(e) => { setFilterRiskBand(e.target.value); setPage(1) }}
+          className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+        >
+          {RISK_BAND_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            inputMode="numeric"
+            value={skorMin}
+            onChange={(e) => { setSkorMin(e.target.value); setPage(1) }}
+            placeholder="Skor min"
+            className="h-9 w-24"
+          />
+          <Input
+            type="number"
+            min="0"
+            max="100"
+            inputMode="numeric"
+            value={skorMax}
+            onChange={(e) => { setSkorMax(e.target.value); setPage(1) }}
+            placeholder="Skor max"
+            className="h-9 w-24"
+          />
+        </div>
+
+        <select
+          value={sort}
+          onChange={(e) => { setSort(e.target.value); setPage(1) }}
+          className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+        >
+          {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
@@ -620,7 +696,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
 
             <div>
               <label className="text-sm font-medium mb-1.5 block">
-                Catatan (opsional — berlaku untuk semua TO terpilih)
+                Catatan (opsional - berlaku untuk semua TO terpilih)
               </label>
               <textarea
                 value={bulkCatatan}
@@ -668,7 +744,7 @@ export function TargetOperasiClient({ canGenerate, isAdmin }: Props) {
                 <li>Pola tidak wajar (zigzag, meter statis, penurunan bertahap)</li>
               </ul>
               <p className="text-xs pt-1">
-                Proses berjalan di <strong>latar belakang</strong> — kamu bebas navigasi ke halaman lain.
+                Proses berjalan di <strong>latar belakang</strong> - kamu bebas navigasi ke halaman lain.
               </p>
             </div>
           </AlertDialogHeader>
@@ -732,7 +808,7 @@ function MlRiskSheet({
             Detail Risiko NALAR
           </SheetTitle>
           <SheetDescription>
-            {item?.pelanggan.idPelanggan} · {item?.pelanggan.nama || "Nama belum diisi"}
+            {item?.pelanggan.idPelanggan} - {item?.pelanggan.nama || "Nama belum diisi"}
           </SheetDescription>
         </SheetHeader>
 

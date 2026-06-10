@@ -94,7 +94,7 @@ export function DeletePelangganDialog({
           <p className="font-semibold mt-1">{nama}</p>
           <div className="mt-4 p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-md">
             <p className="text-sm text-red-800 dark:text-red-300">
-              ⚠️ <strong>Peringatan:</strong> Semua data terkait pelanggan ini
+              <strong>Peringatan:</strong> Semua data terkait pelanggan ini
               (data pemakaian & target operasi) akan ikut terhapus secara permanen.
             </p>
           </div>

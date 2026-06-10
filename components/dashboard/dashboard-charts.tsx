@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Loader2, TrendingUp, PieChart } from "lucide-react"
+import { Loader2, TrendingUp, PieChart, Target, ShieldCheck } from "lucide-react"
 import {
   ResponsiveContainer,
   AreaChart,
@@ -33,6 +33,18 @@ interface TipePoint {
 interface ChartData {
   trendData: TrendPoint[]
   tipeData: TipePoint[]
+  operational?: {
+    funnel: Array<{ key: string; label: string; total: number }>
+    checked: number
+    violations: number
+    hitRate: number | null
+  }
+  riskDistribution?: Array<{
+    band: "high" | "medium" | "low"
+    label: string
+    range: string
+    total: number
+  }>
 }
 
 // Warna per tipe anomali — konsisten dengan badge di halaman TO
@@ -120,9 +132,79 @@ export function DashboardCharts() {
   const totalTO = data.tipeData.reduce((a, b) => a + b.total, 0)
   const hasData = totalTO > 0
   const hasTrend = data.trendData.some((d) => d.total > 0)
+  const maxFunnel = Math.max(...(data.operational?.funnel.map((item) => item.total) ?? [1]), 1)
+  const totalRisk = data.riskDistribution?.reduce((sum, item) => sum + item.total, 0) ?? 0
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Target className="h-4 w-4 text-red-600" />
+              <CardTitle className="text-sm font-semibold">Funnel Operasi P2TL</CardTitle>
+            </div>
+            <CardDescription className="text-xs">
+              Alur target dari dibuat sampai terbukti pelanggaran
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+              {(data.operational?.funnel ?? []).map((item) => (
+                <div key={item.key} className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">{item.label}</p>
+                  <p className="mt-1 text-2xl font-semibold">{item.total.toLocaleString("id-ID")}</p>
+                  <div className="mt-3 h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                    <div
+                      className="h-2 rounded-full bg-red-600"
+                      style={{ width: `${Math.max((item.total / maxFunnel) * 100, item.total > 0 ? 8 : 0)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+              <CardTitle className="text-sm font-semibold">Hit Rate Lapangan</CardTitle>
+            </div>
+            <CardDescription className="text-xs">Efektivitas hasil operasi tercatat</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-4xl font-bold">
+              {data.operational?.hitRate === null || data.operational?.hitRate === undefined
+                ? "-"
+                : `${Math.round(data.operational.hitRate * 100)}%`}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {data.operational?.checked?.toLocaleString("id-ID") ?? 0} diperiksa,{" "}
+              {data.operational?.violations?.toLocaleString("id-ID") ?? 0} terbukti pelanggaran.
+            </p>
+            <div className="mt-4 space-y-2">
+              {(data.riskDistribution ?? []).map((item) => {
+                const pct = totalRisk > 0 ? Math.round((item.total / totalRisk) * 100) : 0
+                return (
+                  <div key={item.band} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-medium">{item.label}</span>
+                      <span className="text-muted-foreground">{item.total.toLocaleString("id-ID")} ({pct}%)</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className={`h-2 rounded-full ${riskBandColor(item.band)}`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
       {/* ── Tren TO per bulan — lebih lebar ────────────────────────────────── */}
       <Card className="lg:col-span-3">
@@ -276,6 +358,7 @@ export function DashboardCharts() {
         </CardContent>
       </Card>
     </div>
+    </div>
   )
 }
 
@@ -288,4 +371,10 @@ function EmptyChart({ label }: { label: string }) {
       <p className="text-sm text-muted-foreground max-w-[180px]">{label}</p>
     </div>
   )
+}
+
+function riskBandColor(band: "high" | "medium" | "low") {
+  if (band === "high") return "bg-red-600"
+  if (band === "medium") return "bg-amber-500"
+  return "bg-slate-500"
 }

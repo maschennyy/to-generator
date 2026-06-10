@@ -239,7 +239,7 @@ export function PemakaianForm() {
             {selectedPelanggan && (
               <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 p-3 rounded-md">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
-                  ✓ Dipilih: {selectedPelanggan.nama}
+                  Dipilih: {selectedPelanggan.nama}
                 </p>
                 <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
                   ID: {selectedPelanggan.idPelanggan} |{" "}

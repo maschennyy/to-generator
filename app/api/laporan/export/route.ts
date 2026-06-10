@@ -62,15 +62,15 @@ export async function POST(request: NextRequest) {
   // ── Sheet 1: Ringkasan KPI ────────────────────────────────────────────────
   const periodeStr = `${new Date(data.range.from).toLocaleDateString("id-ID", {
     day: "2-digit", month: "long", year: "numeric",
-  })} — ${new Date(data.range.to).toLocaleDateString("id-ID", {
+  })} - ${new Date(data.range.to).toLocaleDateString("id-ID", {
     day: "2-digit", month: "long", year: "numeric",
   })}`
 
   const kpiRows: (string | number)[][] = [
-    ["Laporan Target Operasi — TO Generator PLN ICON+"],
+    ["Laporan Target Operasi - TO Generator PLN ICON+"],
     [],
     ["Periode", periodeStr],
-    ["Dicetak oleh", `${userName} — ${new Date().toLocaleString("id-ID")}`],
+    ["Dicetak oleh", `${userName} - ${new Date().toLocaleString("id-ID")}`],
     [],
     ["RINGKASAN KPI", ""],
     ["Total TO (periode)", data.kpi.totalInRange],
